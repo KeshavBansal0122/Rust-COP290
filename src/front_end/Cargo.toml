@@ -13,9 +13,12 @@ console_error_panic_hook = "0.1"
 log = "0.4"
 console_log = "1.0.0"
 web-sys = { version = "0.3", features = ["KeyboardEvent"] }
-[dependencies.js-sys]
-version = "0.3.77"
+js-sys = "0.3.77"
+lazy_static = "1.4.0"
+
+# Add local embedded backend crate
+embedded = { path = "../.." }
 
 [package.metadata.trunk]
-filehash = false 
+filehash = false
 

@@ -1,16 +1,24 @@
-use leptos::*;
+use embedded::common::cell_value::{CellError, CellValue};
+use embedded::common::structs::AbsCell;
+use embedded::embedded_backend::single_threaded::{EmbeddedBackend, ExpressionError};
 use leptos::ev::keydown;
 use leptos::prelude::*;
-use std::sync::Arc;
-use web_sys::KeyboardEvent;
+use leptos::*;
 use std::collections::VecDeque;
+use std::sync::Arc;
 use std::sync::Mutex;
+use web_sys::KeyboardEvent;
 
 const MAX_ROWS: usize = 999;
 const MAX_COLS: usize = 999;
 const DIM: usize = 10;
 const DIMB: usize = 10;
 const MAX_HISTORY: usize = 100; // Maximum number of actions to store in history
+
+// Global backend for the spreadsheet application
+lazy_static::lazy_static! {
+    static ref BACKEND: Mutex<EmbeddedBackend> = Mutex::new(EmbeddedBackend::new(MAX_ROWS as u16, MAX_COLS as u16));
+}
 
 // Store edit history for undo/redo
 #[derive(Clone)]
@@ -48,24 +56,22 @@ fn get_column_name(mut index: usize) -> String {
     name.chars().rev().collect()
 }
 fn parse_cell_reference(cell: String) -> (usize, usize) {
-    let (col_str, row_str): (String, String) = cell
-    .chars()
-    .partition(|c| c.is_ascii_alphabetic());
+    let (col_str, row_str): (String, String) = cell.chars().partition(|c| c.is_ascii_alphabetic());
 
-let col = col_str
-.chars()
-.fold(0, |acc, c| acc * 26 + (c.to_ascii_uppercase() as u8 - b'A' + 1) as usize);
+    let col = col_str.chars().fold(0, |acc, c| {
+        acc * 26 + (c.to_ascii_uppercase() as u8 - b'A' + 1) as usize
+    });
 
-let row = row_str.parse::<usize>().unwrap();
+    let row = row_str.parse::<usize>().unwrap();
 
-(row, col)
+    (row, col)
 }
 
 enum EditCommand {
     ViewPort,
     Undo,
     Redo,
-    EditCell{
+    EditCell {
         formula: String,
         cell_row: usize,
         cell_col: usize,
@@ -76,8 +82,8 @@ enum EditCommand {
     },
     Paste {
         formula: String,
-        src_row : usize,
-        src_col : usize,
+        src_row: usize,
+        src_col: usize,
         cell_row: usize,
         cell_col: usize,
     },
@@ -95,8 +101,43 @@ fn call_backend(
 ) -> Vec<(Arc<CellData>, usize, usize)> {
     match cmd {
         EditCommand::ViewPort => {
-            // No edits; return empty
-            vec![]
+            // Fetch data from the viewport range using the backend
+            let mut result = vec![];
+
+            if let Ok(backend) = BACKEND.lock() {
+                // Get cell range for the current viewport
+                let top_left = AbsCell::new(current_row as i16, current_col as i16);
+                let bottom_right = AbsCell::new(
+                    (current_row + DIM - 1) as i16,
+                    (current_col + DIMB - 1) as i16,
+                );
+
+                // Iterate through cells in the range
+                for (cell, value) in backend.get_cell_range(top_left, bottom_right) {
+                    let r = cell.row as usize;
+                    let c = cell.col as usize;
+
+                    // Convert CellValue to string representation
+                    let display_value = match value {
+                        Ok(CellValue::String(s)) => s.clone(),
+                        Ok(CellValue::Number(n)) => n.to_string(),
+                        Ok(CellValue::Empty) => String::new(),
+                        Err(CellError::DivideByZero) => "#DIV/0!".to_string(),
+                        Err(CellError::DependsOnNonNumeric) => "#ERROR!".to_string(),
+                        Err(CellError::DependsOnErr) => "#ERROR!".to_string(),
+                        _ => "#ERROR!".to_string(),
+                    };
+
+                    let cell_data = Arc::new(CellData {
+                        value: RwSignal::new(display_value.clone()),
+                        formula: RwSignal::new(display_value),
+                    });
+
+                    result.push((cell_data, r, c));
+                }
+            }
+
+            result
         }
         EditCommand::Undo => {
             // Pop the most recent action from the undo stack
@@ -105,8 +146,49 @@ fn call_backend(
                     // Create a redo action with the current state before undoing
                     if let Ok(mut redo_stack) = REDO_STACK.lock() {
                         redo_stack.push_front(action.clone());
-                        
-                        // Return the cell data to its previous state
+
+                        if let Ok(mut backend) = BACKEND.lock() {
+                            // Restore previous cell state in the backend
+                            let cell = AbsCell::new(action.cell_row as i16, action.cell_col as i16);
+
+                            // For Cut/Paste, convert to appropriate CellValue
+                            match action.cmd {
+                                EditCommandType::Cut
+                                | EditCommandType::Paste
+                                | EditCommandType::Edit => {
+                                    if action.old_formula.is_empty() {
+                                        // Was empty or a simple value
+                                        if action.old_value.is_empty() {
+                                            backend.set_cell_empty(cell);
+                                        } else {
+                                            // Try to convert to appropriate type
+                                            if let Ok(num) = action.old_value.parse::<f64>() {
+                                                backend
+                                                    .set_cell_value(cell, CellValue::Number(num));
+                                            } else if action.old_value == "true"
+                                                || action.old_value == "false"
+                                            {
+                                                // Since Boolean isn't a variant, store as String
+                                                backend.set_cell_value(
+                                                    cell,
+                                                    CellValue::String(action.old_value.clone()),
+                                                );
+                                            } else {
+                                                backend.set_cell_value(
+                                                    cell,
+                                                    CellValue::String(action.old_value.clone()),
+                                                );
+                                            }
+                                        }
+                                    } else {
+                                        // Was a formula
+                                        let _ = backend.set_cell_formula(cell, &action.old_formula);
+                                    }
+                                }
+                            }
+                        }
+
+                        // Return data for UI update
                         let cell_data = Arc::new(CellData {
                             value: RwSignal::new(action.old_value),
                             formula: RwSignal::new(action.old_formula),
@@ -124,8 +206,44 @@ fn call_backend(
                     // Add the action back to the undo stack
                     if let Ok(mut undo_stack) = UNDO_STACK.lock() {
                         undo_stack.push_front(action.clone());
-                        
-                        // Re-apply the action
+
+                        if let Ok(mut backend) = BACKEND.lock() {
+                            // Re-apply the action to the backend
+                            let cell = AbsCell::new(action.cell_row as i16, action.cell_col as i16);
+
+                            match action.cmd {
+                                EditCommandType::Edit | EditCommandType::Paste => {
+                                    if action.formula.starts_with("=") {
+                                        let _ = backend.set_cell_formula(cell, &action.formula);
+                                    } else if action.formula.is_empty() {
+                                        backend.set_cell_empty(cell);
+                                    } else {
+                                        // Try to convert to appropriate type
+                                        if let Ok(num) = action.formula.parse::<f64>() {
+                                            backend.set_cell_value(cell, CellValue::Number(num));
+                                        } else if action.formula == "true"
+                                            || action.formula == "false"
+                                        {
+                                            // Since Boolean isn't a variant, store as String
+                                            backend.set_cell_value(
+                                                cell,
+                                                CellValue::String(action.formula.clone()),
+                                            );
+                                        } else {
+                                            backend.set_cell_value(
+                                                cell,
+                                                CellValue::String(action.formula.clone()),
+                                            );
+                                        }
+                                    }
+                                }
+                                EditCommandType::Cut => {
+                                    backend.set_cell_empty(cell);
+                                }
+                            }
+                        }
+
+                        // Return data for UI update
                         let cell_data = Arc::new(CellData {
                             value: RwSignal::new(action.formula.clone()),
                             formula: RwSignal::new(action.formula),
@@ -141,122 +259,163 @@ fn call_backend(
             cell_row,
             cell_col,
         } => {
-            // Save the current state for undo
-            // First check if the cell is visible
-            let old_value = String::new();
-            let old_formula = String::new();
-            
-            // Check if the cell is in the current viewport
-            if cell_row >= current_row && cell_row < current_row + DIM &&
-               cell_col >= current_col && cell_col < current_col + DIMB {
-                let local_row = cell_row - current_row;
-                let local_col = cell_col - current_col;
-                
-                // We can safely save the current state for undo
-                let table_data: Arc<Vec<Vec<Arc<CellData>>>> = Arc::new(
-                    (0..DIM)
-                    .map(|_| {
-                        (0..DIMB)
-                        .map(|_| {
-                            Arc::new(CellData {
-                                value: RwSignal::new(String::new()),
-                                formula: RwSignal::new(String::new()),
-                            })
-                        })
-                        .collect()
-                    })
-                    .collect(),
-                );
-                
-                let old_value = table_data[local_row][local_col].value.get();
-                let old_formula = table_data[local_row][local_col].formula.get();
-                
-                // Add to undo stack
-                if let Ok(mut undo_stack) = UNDO_STACK.lock() {
-                    undo_stack.push_front(HistoryAction {
-                        cmd: EditCommandType::Edit,
-                        formula: formula.clone(),
-                        cell_row,
-                        cell_col,
-                        old_value,
-                        old_formula,
-                    });
-                    
-                    // If undo stack is too large, remove oldest actions
-                    while undo_stack.len() > MAX_HISTORY {
-                        undo_stack.pop_back();
+            let mut old_value = String::new();
+            let mut old_formula = String::new();
+
+            // Save the current state before making changes
+            if let Ok(backend) = BACKEND.lock() {
+                let cell = AbsCell::new(cell_row as i16, cell_col as i16);
+                let current_value = backend.get_cell_value(cell);
+
+                // Convert current value to strings for history
+                match current_value {
+                    Ok(CellValue::String(s)) => {
+                        old_value = s.clone();
+                        old_formula = s.clone();
+                    }
+                    Ok(CellValue::Number(n)) => {
+                        old_value = n.to_string();
+                        old_formula = n.to_string();
+                    }
+                    Ok(CellValue::Empty) => {
+                        old_value = String::new();
+                        old_formula = String::new();
+                    }
+                    Err(_) => {
+                        old_value = "#ERROR!".to_string();
+                        old_formula = "#ERROR!".to_string();
                     }
                 }
-                
-                // Clear the redo stack as new actions invalidate previous redos
-                if let Ok(mut redo_stack) = REDO_STACK.lock() {
-                    redo_stack.clear();
+            }
+
+            // Add to undo stack
+            if let Ok(mut undo_stack) = UNDO_STACK.lock() {
+                undo_stack.push_front(HistoryAction {
+                    cmd: EditCommandType::Edit,
+                    formula: formula.clone(),
+                    cell_row,
+                    cell_col,
+                    old_value,
+                    old_formula,
+                });
+
+                // If undo stack is too large, remove oldest actions
+                while undo_stack.len() > MAX_HISTORY {
+                    undo_stack.pop_back();
                 }
             }
-            
+
+            // Clear the redo stack as new actions invalidate previous redos
+            if let Ok(mut redo_stack) = REDO_STACK.lock() {
+                redo_stack.clear();
+            }
+
+            // Update the cell in the backend
+            if let Ok(mut backend) = BACKEND.lock() {
+                let cell = AbsCell::new(cell_row as i16, cell_col as i16);
+
+                // Process the formula or value
+                if formula.starts_with("=") {
+                    let _ = backend.set_cell_formula(cell, &formula);
+                } else if formula.is_empty() {
+                    backend.set_cell_empty(cell);
+                } else {
+                    // Try to convert to appropriate type
+                    if let Ok(num) = formula.parse::<f64>() {
+                        backend.set_cell_value(cell, CellValue::Number(num));
+                    } else if formula == "true" || formula == "false" {
+                        // Since Boolean isn't a variant, store as String
+                        backend.set_cell_value(cell, CellValue::String(formula.clone()));
+                    } else {
+                        backend.set_cell_value(cell, CellValue::String(formula.clone()));
+                    }
+                }
+
+                // Get the updated value for the UI
+                let result = backend.get_cell_value(cell);
+                let display_value = match result {
+                    Ok(CellValue::String(s)) => s.clone(),
+                    Ok(CellValue::Number(n)) => n.to_string(),
+                    Ok(CellValue::Empty) => String::new(),
+                    Err(CellError::DivideByZero) => "#DIV/0!".to_string(),
+                    Err(CellError::DependsOnNonNumeric) => "#ERROR!".to_string(),
+                    Err(CellError::DependsOnErr) => "#ERROR!".to_string(),
+                    _ => "#ERROR!".to_string(),
+                };
+
+                let cell_data = Arc::new(CellData {
+                    value: RwSignal::new(display_value.clone()),
+                    formula: RwSignal::new(formula),
+                });
+                return vec![(cell_data, cell_row, cell_col)];
+            }
+
+            // Fallback if backend lock fails
             let cell_data = Arc::new(CellData {
-                value: RwSignal::new(formula.clone() + "hi"),
+                value: RwSignal::new(formula.clone()),
                 formula: RwSignal::new(formula),
             });
             vec![(cell_data, cell_row, cell_col)]
         }
 
-        EditCommand::Cut {
-            cell_row,
-            cell_col,
-        } => {
-            // Similar undo handling as with EditCell
-            let old_value = String::new();
-            let old_formula = String::new();
-            
-            // Check if the cell is in the current viewport
-            if cell_row >= current_row && cell_row < current_row + DIM &&
-               cell_col >= current_col && cell_col < current_col + DIMB {
-                let local_row = cell_row - current_row;
-                let local_col = cell_col - current_col;
-                
-                // We can safely save the current state for undo
-                let table_data: Arc<Vec<Vec<Arc<CellData>>>> = Arc::new(
-                    (0..DIM)
-                    .map(|_| {
-                        (0..DIMB)
-                        .map(|_| {
-                            Arc::new(CellData {
-                                value: RwSignal::new(String::new()),
-                                formula: RwSignal::new(String::new()),
-                            })
-                        })
-                        .collect()
-                    })
-                    .collect(),
-                );
-                
-                let old_value = table_data[local_row][local_col].value.get();
-                let old_formula = table_data[local_row][local_col].formula.get();
-                
-                // Add to undo stack
-                if let Ok(mut undo_stack) = UNDO_STACK.lock() {
-                    undo_stack.push_front(HistoryAction {
-                        cmd: EditCommandType::Cut,
-                        formula: String::new(),
-                        cell_row,
-                        cell_col,
-                        old_value,
-                        old_formula,
-                    });
-                    
-                    // If undo stack is too large, remove oldest actions
-                    while undo_stack.len() > MAX_HISTORY {
-                        undo_stack.pop_back();
+        EditCommand::Cut { cell_row, cell_col } => {
+            let mut old_value = String::new();
+            let mut old_formula = String::new();
+
+            // Save current state before cutting
+            if let Ok(backend) = BACKEND.lock() {
+                let cell = AbsCell::new(cell_row as i16, cell_col as i16);
+                let current_value = backend.get_cell_value(cell);
+
+                // Convert current value to strings for history
+                match current_value {
+                    Ok(CellValue::String(s)) => {
+                        old_value = s.clone();
+                        old_formula = s.clone();
+                    }
+                    Ok(CellValue::Number(n)) => {
+                        old_value = n.to_string();
+                        old_formula = n.to_string();
+                    }
+                    Ok(CellValue::Empty) => {
+                        old_value = String::new();
+                        old_formula = String::new();
+                    }
+                    Err(_) => {
+                        old_value = "#ERROR!".to_string();
+                        old_formula = "#ERROR!".to_string();
                     }
                 }
-                
-                // Clear the redo stack as new actions invalidate previous redos
-                if let Ok(mut redo_stack) = REDO_STACK.lock() {
-                    redo_stack.clear();
+            }
+
+            // Add to undo stack
+            if let Ok(mut undo_stack) = UNDO_STACK.lock() {
+                undo_stack.push_front(HistoryAction {
+                    cmd: EditCommandType::Cut,
+                    formula: String::new(),
+                    cell_row,
+                    cell_col,
+                    old_value,
+                    old_formula,
+                });
+
+                // If undo stack is too large, remove oldest actions
+                while undo_stack.len() > MAX_HISTORY {
+                    undo_stack.pop_back();
                 }
             }
-            
+
+            // Clear the redo stack as new actions invalidate previous redos
+            if let Ok(mut redo_stack) = REDO_STACK.lock() {
+                redo_stack.clear();
+            }
+
+            // Clear the cell in the backend
+            if let Ok(mut backend) = BACKEND.lock() {
+                let cell = AbsCell::new(cell_row as i16, cell_col as i16);
+                backend.set_cell_empty(cell);
+            }
+
             let cell_data = Arc::new(CellData {
                 value: RwSignal::new(String::new()),
                 formula: RwSignal::new(String::new()),
@@ -271,58 +430,98 @@ fn call_backend(
             cell_row,
             cell_col,
         } => {
-            // Similar undo handling as with EditCell
-            let old_value = String::new();
-            let old_formula = String::new();
-            
-            // Check if the cell is in the current viewport
-            if cell_row >= current_row && cell_row < current_row + DIM &&
-               cell_col >= current_col && cell_col < current_col + DIMB {
-                let local_row = cell_row - current_row;
-                let local_col = cell_col - current_col;
-                
-                // We can safely save the current state for undo
-                let table_data: Arc<Vec<Vec<Arc<CellData>>>> = Arc::new(
-                    (0..DIM)
-                    .map(|_| {
-                        (0..DIMB)
-                        .map(|_| {
-                            Arc::new(CellData {
-                                value: RwSignal::new(String::new()),
-                                formula: RwSignal::new(String::new()),
-                            })
-                        })
-                        .collect()
-                    })
-                    .collect(),
-                );
-                
-                let old_value = table_data[local_row][local_col].value.get();
-                let old_formula = table_data[local_row][local_col].formula.get();
-                
-                // Add to undo stack
-                if let Ok(mut undo_stack) = UNDO_STACK.lock() {
-                    undo_stack.push_front(HistoryAction {
-                        cmd: EditCommandType::Paste,
-                        formula: formula.clone(),
-                        cell_row,
-                        cell_col,
-                        old_value,
-                        old_formula,
-                    });
-                    
-                    // If undo stack is too large, remove oldest actions
-                    while undo_stack.len() > MAX_HISTORY {
-                        undo_stack.pop_back();
+            let mut old_value = String::new();
+            let mut old_formula = String::new();
+
+            // Save current state before pasting
+            if let Ok(backend) = BACKEND.lock() {
+                let cell = AbsCell::new(cell_row as i16, cell_col as i16);
+                let current_value = backend.get_cell_value(cell);
+
+                // Convert current value to strings for history
+                match current_value {
+                    Ok(CellValue::String(s)) => {
+                        old_value = s.clone();
+                        old_formula = s.clone();
+                    }
+                    Ok(CellValue::Number(n)) => {
+                        old_value = n.to_string();
+                        old_formula = n.to_string();
+                    }
+                    Ok(CellValue::Empty) => {
+                        old_value = String::new();
+                        old_formula = String::new();
+                    }
+                    Err(_) => {
+                        old_value = "#ERROR!".to_string();
+                        old_formula = "#ERROR!".to_string();
                     }
                 }
-                
-                // Clear the redo stack as new actions invalidate previous redos
-                if let Ok(mut redo_stack) = REDO_STACK.lock() {
-                    redo_stack.clear();
+            }
+
+            // Add to undo stack
+            if let Ok(mut undo_stack) = UNDO_STACK.lock() {
+                undo_stack.push_front(HistoryAction {
+                    cmd: EditCommandType::Paste,
+                    formula: formula.clone(),
+                    cell_row,
+                    cell_col,
+                    old_value,
+                    old_formula,
+                });
+
+                // If undo stack is too large, remove oldest actions
+                while undo_stack.len() > MAX_HISTORY {
+                    undo_stack.pop_back();
                 }
             }
-            
+
+            // Clear the redo stack as new actions invalidate previous redos
+            if let Ok(mut redo_stack) = REDO_STACK.lock() {
+                redo_stack.clear();
+            }
+
+            // Update the cell in the backend
+            if let Ok(mut backend) = BACKEND.lock() {
+                let cell = AbsCell::new(cell_row as i16, cell_col as i16);
+
+                // Process the formula or value being pasted
+                if formula.starts_with("=") {
+                    let _ = backend.set_cell_formula(cell, &formula);
+                } else if formula.is_empty() {
+                    backend.set_cell_empty(cell);
+                } else {
+                    // Try to convert to appropriate type
+                    if let Ok(num) = formula.parse::<f64>() {
+                        backend.set_cell_value(cell, CellValue::Number(num));
+                    } else if formula == "true" || formula == "false" {
+                        // Since Boolean isn't a variant, store as String
+                        backend.set_cell_value(cell, CellValue::String(formula.clone()));
+                    } else {
+                        backend.set_cell_value(cell, CellValue::String(formula.clone()));
+                    }
+                }
+
+                // Get the updated value for the UI
+                let result = backend.get_cell_value(cell);
+                let display_value = match result {
+                    Ok(CellValue::String(s)) => s.clone(),
+                    Ok(CellValue::Number(n)) => n.to_string(),
+                    Ok(CellValue::Empty) => String::new(),
+                    Err(CellError::DivideByZero) => "#DIV/0!".to_string(),
+                    Err(CellError::DependsOnNonNumeric) => "#ERROR!".to_string(),
+                    Err(CellError::DependsOnErr) => "#ERROR!".to_string(),
+                    _ => "#ERROR!".to_string(),
+                };
+
+                let cell_data = Arc::new(CellData {
+                    value: RwSignal::new(display_value),
+                    formula: RwSignal::new(formula),
+                });
+                return vec![(cell_data, cell_row, cell_col)];
+            }
+
+            // Fallback if backend lock fails
             let cell_data = Arc::new(CellData {
                 value: RwSignal::new(formula.clone()),
                 formula: RwSignal::new(formula),
@@ -332,18 +531,17 @@ fn call_backend(
     }
 }
 
-
 fn handle_edit_commands(
     cmd: EditCommand,
     table_data: &Arc<Vec<Vec<Arc<CellData>>>>,
     current_row: usize,
     current_col: usize,
 ) {
-    let updated_cells = call_backend(cmd, current_row,current_col);
+    let updated_cells = call_backend(cmd, current_row, current_col);
 
     for (cell_data, target_row, target_col) in updated_cells {
-        if ( target_row<current_row+DIM && target_row>=current_row)
-            && (target_col<current_col+DIMB && target_col>=current_col)
+        if (target_row < current_row + DIM && target_row >= current_row)
+            && (target_col < current_col + DIMB && target_col >= current_col)
         {
             let local_row = target_row - current_row;
             let local_col = target_col - current_col;
@@ -358,7 +556,6 @@ fn handle_edit_commands(
     }
 }
 
-
 #[component]
 pub fn Spreadsheet() -> impl IntoView {
     let (current_row, set_current_row) = signal(1);
@@ -366,24 +563,24 @@ pub fn Spreadsheet() -> impl IntoView {
     let (source_cell, set_source_cell) = signal(String::from("A1"));
     let (check, set_check) = signal(String::new());
     let (formula, set_formula) = signal(String::new());
-    let (clipboard, set_clipboard) = signal((String::new(),  1, 1 ));
+    let (clipboard, set_clipboard) = signal((String::new(), 1, 1));
     // let key_buffer = RwSignal::new(String::new());
     // let is_editing = RwSignal::new(false);
     // let mode = RwSignal::new(Mode::Navigation);
-    
+
     let table_data: Arc<Vec<Vec<Arc<CellData>>>> = Arc::new(
         (0..DIM)
-        .map(|_| {
-            (0..DIMB)
             .map(|_| {
-                Arc::new(CellData {
-                    value: RwSignal::new(String::new()),
-                    formula: RwSignal::new(String::new()),
-                })
+                (0..DIMB)
+                    .map(|_| {
+                        Arc::new(CellData {
+                            value: RwSignal::new(String::new()),
+                            formula: RwSignal::new(String::new()),
+                        })
+                    })
+                    .collect()
             })
-            .collect()
-        })
-        .collect(),
+            .collect(),
     );
     let table_data2 = Arc::clone(&table_data);
     let table_data3 = Arc::clone(&table_data);
@@ -393,17 +590,16 @@ pub fn Spreadsheet() -> impl IntoView {
 
     let input_refs: Arc<Vec<Vec<NodeRef<html::Input>>>> = Arc::new(
         (0..DIM)
-        .map(|_| (0..DIMB).map(|_| NodeRef::new()).collect())
-        .collect(),
+            .map(|_| (0..DIMB).map(|_| NodeRef::new()).collect())
+            .collect(),
     );
-    let input_refs2=Arc::clone(&input_refs);
-    let input_refs3=Arc::clone(&input_refs);
-
+    let input_refs2 = Arc::clone(&input_refs);
+    let input_refs3 = Arc::clone(&input_refs);
 
     let formula_bar = move || {
-        let table_datai=Arc::clone(&table_data6);
-        let (r,c)=parse_cell_reference(source_cell.get());
-        let cell = Arc::clone(&table_data[r-current_row.get()][c-current_col.get()]);
+        let table_datai = Arc::clone(&table_data6);
+        let (r, c) = parse_cell_reference(source_cell.get());
+        let cell = Arc::clone(&table_data[r - current_row.get()][c - current_col.get()]);
 
         view! {
             <label>"Formula: "</label>
@@ -425,13 +621,13 @@ pub fn Spreadsheet() -> impl IntoView {
                             &table_datai,
                             current_row.get(),
                             current_col.get(),
-                        ); 
-                    }  
+                        );
+                    }
                 />
 
         }
     };
-    
+
     let undo = move || {
         let table_datai = Arc::clone(&table_data4);
         view! {
@@ -454,7 +650,7 @@ pub fn Spreadsheet() -> impl IntoView {
 
         view! {
             <button class="undo-redo-button" on:click=move |_| {
-                
+
                 handle_edit_commands(
                     EditCommand::Redo,
                     &table_datai,
@@ -469,7 +665,7 @@ pub fn Spreadsheet() -> impl IntoView {
     };
 
     // Style for buttons side by side
-    let buttons =  {
+    let buttons = {
         view! {
             <div style="display: flex; gap: 10px;">
                 {undo}
@@ -478,14 +674,13 @@ pub fn Spreadsheet() -> impl IntoView {
         }
     };
 
-
     let head = move || {
         (current_col.get()..current_col.get() + DIMB)
             .map(|col| view! { <th class="column-number">{get_column_name(col)}</th> })
             .collect::<Vec<_>>()
     };
 
-    let  body = {
+    let body = {
         move || {
             (0..DIM)
                 .map(|row| {
@@ -564,43 +759,44 @@ pub fn Spreadsheet() -> impl IntoView {
                     }
                 })
                 .collect_view()
-            }
-        };
-        
+        }
+    };
+
     let handle_keydown = move |event: KeyboardEvent| {
         let key = event.key();
         match key.as_str() {
             "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight" => {
                 event.prevent_default(); // 
                 event.stop_propagation(); // 
-            },
-            _ => {
-                return
             }
+            _ => return,
         }
-        let  row = current_row.get();
-        let  col = current_col.get();
+        let row = current_row.get();
+        let col = current_col.get();
         let motion = key.as_str();
-        
-        let ( old_r,  old_c) = parse_cell_reference(source_cell.get());
-        
-        let (mut sel_r, mut sel_c) = (old_r,old_c);
+
+        let (old_r, old_c) = parse_cell_reference(source_cell.get());
+
+        let (mut sel_r, mut sel_c) = (old_r, old_c);
         if event.ctrl_key() {
             let cell = &table_data3[old_r - current_row.get()][old_c - current_col.get()];
-    
-            match motion{
+
+            match motion {
                 "c" | "C" => {
                     // Ctrl+C
                     event.prevent_default();
-                    set_clipboard.set((cell.formula.get(),old_r,old_c));
+                    set_clipboard.set((cell.formula.get(), old_r, old_c));
                     return;
                 }
                 "x" | "X" => {
                     // Ctrl+X
                     event.prevent_default();
-                    set_clipboard.set((cell.formula.get(),old_r,old_c));
+                    set_clipboard.set((cell.formula.get(), old_r, old_c));
                     handle_edit_commands(
-                        EditCommand::Cut { cell_row: old_r, cell_col: old_c },
+                        EditCommand::Cut {
+                            cell_row: old_r,
+                            cell_col: old_c,
+                        },
                         &table_data3,
                         current_row.get(),
                         current_col.get(),
@@ -612,7 +808,13 @@ pub fn Spreadsheet() -> impl IntoView {
                     event.prevent_default();
                     let copied = clipboard.get();
                     handle_edit_commands(
-                        EditCommand::Paste { formula: copied.0, src_row: copied.1, src_col: copied.2, cell_row: old_r, cell_col: old_c },
+                        EditCommand::Paste {
+                            formula: copied.0,
+                            src_row: copied.1,
+                            src_col: copied.2,
+                            cell_row: old_r,
+                            cell_col: old_c,
+                        },
                         &table_data3,
                         current_row.get(),
                         current_col.get(),
@@ -622,26 +824,21 @@ pub fn Spreadsheet() -> impl IntoView {
                 _ => {} // do nothing for other Ctrl keys
             }
         }
-        
+
         match motion {
             "ArrowUp" => {
                 // key_buffer.set(String::new());
                 if sel_r > 1 {
-                    
                     sel_r -= 1;
-                }
-                else {
+                } else {
                     return;
                 }
             }
             "ArrowDown" => {
-                
-
                 // key_buffer.set(String::new());
                 if sel_r < MAX_ROWS {
                     sel_r += 1;
-                }
-                else {
+                } else {
                     return;
                 }
             }
@@ -649,67 +846,57 @@ pub fn Spreadsheet() -> impl IntoView {
                 // key_buffer.set(String::new());
                 if sel_c > 1 {
                     sel_c -= 1;
-                }
-                else {
+                } else {
                     return;
                 }
             }
             "ArrowRight" => {
                 // key_buffer.set(String::new());
-                if sel_c  < MAX_COLS {
+                if sel_c < MAX_COLS {
                     sel_c += 1;
-                }
-                else {
+                } else {
                     return;
                 }
             }
-            
+
             _ => {
                 event.stop_propagation();
                 event.prevent_default();
                 return;
             }
         }
-        //comes here 
+        //comes here
 
-        if  sel_r < DIM +row && sel_r>=row  && sel_c>= col && sel_c < DIMB +col   {
+        if sel_r < DIM + row && sel_r >= row && sel_c >= col && sel_c < DIMB + col {
             set_check.update(|s| {
                 let num = s.parse::<usize>().unwrap_or(0);
                 *s = (num + 1).to_string();
             });
-            //doesnt come here 
-            set_source_cell.set(format!("{}{}", get_column_name(sel_c),sel_r ));
-            let cell_inp=input_refs3[sel_r-row][sel_c-col];
-            let cell = Arc::clone(&table_data3[sel_r-row][sel_c-col]);
+            //doesnt come here
+            set_source_cell.set(format!("{}{}", get_column_name(sel_c), sel_r));
+            let cell_inp = input_refs3[sel_r - row][sel_c - col];
+            let cell = Arc::clone(&table_data3[sel_r - row][sel_c - col]);
             if let Some(cell_input) = cell_inp.get() {
                 let _ = cell_input.focus();
             }
             if cell.formula.get().is_empty() {
                 set_formula.set(cell.value.get());
-            }
-            else {
+            } else {
                 set_formula.set(cell.formula.get());
             }
-            
-
-        }
-
-        else  {
+        } else {
             // doesnt come here
-            let (a ,b):(isize,isize)=(row as isize +sel_r as isize-old_r as isize ,col as isize +sel_c as isize -old_c as isize );
-            set_current_row.set(a as usize);
-            
-            set_current_col.set(b as usize);
-            
-            set_source_cell.set(format!("{}{}", get_column_name(sel_c),sel_r ));
-            handle_edit_commands(
-                EditCommand::ViewPort,
-                &table_data3,
-                a as usize,
-                b as usize,
+            let (a, b): (isize, isize) = (
+                row as isize + sel_r as isize - old_r as isize,
+                col as isize + sel_c as isize - old_c as isize,
             );
+            set_current_row.set(a as usize);
+
+            set_current_col.set(b as usize);
+
+            set_source_cell.set(format!("{}{}", get_column_name(sel_c), sel_r));
+            handle_edit_commands(EditCommand::ViewPort, &table_data3, a as usize, b as usize);
         }
-       
     };
     //doesmnt come here htf is this possible
 
