@@ -1,14 +1,38 @@
-// #[allow(dead_code)]
 use leptos::*;
 use leptos::ev::keydown;
 use leptos::prelude::*;
 use std::sync::Arc;
 use web_sys::KeyboardEvent;
+use std::collections::VecDeque;
+use std::sync::Mutex;
 
 const MAX_ROWS: usize = 999;
 const MAX_COLS: usize = 999;
-const DIM: usize = 20;
+const DIM: usize = 10;
 const DIMB: usize = 10;
+const MAX_HISTORY: usize = 100; // Maximum number of actions to store in history
+
+// Store edit history for undo/redo
+#[derive(Clone)]
+struct HistoryAction {
+    cmd: EditCommandType,
+    formula: String,
+    cell_row: usize,
+    cell_col: usize,
+    old_value: String,
+    old_formula: String,
+}
+
+#[derive(Clone)]
+enum EditCommandType {
+    Edit,
+    Cut,
+    Paste,
+}
+
+// Global history stacks
+static UNDO_STACK: Mutex<VecDeque<HistoryAction>> = Mutex::new(VecDeque::new());
+static REDO_STACK: Mutex<VecDeque<HistoryAction>> = Mutex::new(VecDeque::new());
 
 fn get_column_name(mut index: usize) -> String {
     let mut name = String::new();
@@ -70,14 +94,46 @@ fn call_backend(
     current_col: usize,
 ) -> Vec<(Arc<CellData>, usize, usize)> {
     match cmd {
-        EditCommand::ViewPort=> {
+        EditCommand::ViewPort => {
             // No edits; return empty
             vec![]
         }
-        EditCommand::Undo=> {
+        EditCommand::Undo => {
+            // Pop the most recent action from the undo stack
+            if let Ok(mut undo_stack) = UNDO_STACK.lock() {
+                if let Some(action) = undo_stack.pop_front() {
+                    // Create a redo action with the current state before undoing
+                    if let Ok(mut redo_stack) = REDO_STACK.lock() {
+                        redo_stack.push_front(action.clone());
+                        
+                        // Return the cell data to its previous state
+                        let cell_data = Arc::new(CellData {
+                            value: RwSignal::new(action.old_value),
+                            formula: RwSignal::new(action.old_formula),
+                        });
+                        return vec![(cell_data, action.cell_row, action.cell_col)];
+                    }
+                }
+            }
             vec![]
         }
-        EditCommand::Redo=> {
+        EditCommand::Redo => {
+            // Pop the most recent action from the redo stack
+            if let Ok(mut redo_stack) = REDO_STACK.lock() {
+                if let Some(action) = redo_stack.pop_front() {
+                    // Add the action back to the undo stack
+                    if let Ok(mut undo_stack) = UNDO_STACK.lock() {
+                        undo_stack.push_front(action.clone());
+                        
+                        // Re-apply the action
+                        let cell_data = Arc::new(CellData {
+                            value: RwSignal::new(action.formula.clone()),
+                            formula: RwSignal::new(action.formula),
+                        });
+                        return vec![(cell_data, action.cell_row, action.cell_col)];
+                    }
+                }
+            }
             vec![]
         }
         EditCommand::EditCell {
@@ -85,8 +141,61 @@ fn call_backend(
             cell_row,
             cell_col,
         } => {
+            // Save the current state for undo
+            // First check if the cell is visible
+            let old_value = String::new();
+            let old_formula = String::new();
+            
+            // Check if the cell is in the current viewport
+            if cell_row >= current_row && cell_row < current_row + DIM &&
+               cell_col >= current_col && cell_col < current_col + DIMB {
+                let local_row = cell_row - current_row;
+                let local_col = cell_col - current_col;
+                
+                // We can safely save the current state for undo
+                let table_data: Arc<Vec<Vec<Arc<CellData>>>> = Arc::new(
+                    (0..DIM)
+                    .map(|_| {
+                        (0..DIMB)
+                        .map(|_| {
+                            Arc::new(CellData {
+                                value: RwSignal::new(String::new()),
+                                formula: RwSignal::new(String::new()),
+                            })
+                        })
+                        .collect()
+                    })
+                    .collect(),
+                );
+                
+                let old_value = table_data[local_row][local_col].value.get();
+                let old_formula = table_data[local_row][local_col].formula.get();
+                
+                // Add to undo stack
+                if let Ok(mut undo_stack) = UNDO_STACK.lock() {
+                    undo_stack.push_front(HistoryAction {
+                        cmd: EditCommandType::Edit,
+                        formula: formula.clone(),
+                        cell_row,
+                        cell_col,
+                        old_value,
+                        old_formula,
+                    });
+                    
+                    // If undo stack is too large, remove oldest actions
+                    while undo_stack.len() > MAX_HISTORY {
+                        undo_stack.pop_back();
+                    }
+                }
+                
+                // Clear the redo stack as new actions invalidate previous redos
+                if let Ok(mut redo_stack) = REDO_STACK.lock() {
+                    redo_stack.clear();
+                }
+            }
+            
             let cell_data = Arc::new(CellData {
-                value: RwSignal::new(formula.clone()+"hi"),
+                value: RwSignal::new(formula.clone() + "hi"),
                 formula: RwSignal::new(formula),
             });
             vec![(cell_data, cell_row, cell_col)]
@@ -96,6 +205,58 @@ fn call_backend(
             cell_row,
             cell_col,
         } => {
+            // Similar undo handling as with EditCell
+            let old_value = String::new();
+            let old_formula = String::new();
+            
+            // Check if the cell is in the current viewport
+            if cell_row >= current_row && cell_row < current_row + DIM &&
+               cell_col >= current_col && cell_col < current_col + DIMB {
+                let local_row = cell_row - current_row;
+                let local_col = cell_col - current_col;
+                
+                // We can safely save the current state for undo
+                let table_data: Arc<Vec<Vec<Arc<CellData>>>> = Arc::new(
+                    (0..DIM)
+                    .map(|_| {
+                        (0..DIMB)
+                        .map(|_| {
+                            Arc::new(CellData {
+                                value: RwSignal::new(String::new()),
+                                formula: RwSignal::new(String::new()),
+                            })
+                        })
+                        .collect()
+                    })
+                    .collect(),
+                );
+                
+                let old_value = table_data[local_row][local_col].value.get();
+                let old_formula = table_data[local_row][local_col].formula.get();
+                
+                // Add to undo stack
+                if let Ok(mut undo_stack) = UNDO_STACK.lock() {
+                    undo_stack.push_front(HistoryAction {
+                        cmd: EditCommandType::Cut,
+                        formula: String::new(),
+                        cell_row,
+                        cell_col,
+                        old_value,
+                        old_formula,
+                    });
+                    
+                    // If undo stack is too large, remove oldest actions
+                    while undo_stack.len() > MAX_HISTORY {
+                        undo_stack.pop_back();
+                    }
+                }
+                
+                // Clear the redo stack as new actions invalidate previous redos
+                if let Ok(mut redo_stack) = REDO_STACK.lock() {
+                    redo_stack.clear();
+                }
+            }
+            
             let cell_data = Arc::new(CellData {
                 value: RwSignal::new(String::new()),
                 formula: RwSignal::new(String::new()),
@@ -110,6 +271,58 @@ fn call_backend(
             cell_row,
             cell_col,
         } => {
+            // Similar undo handling as with EditCell
+            let old_value = String::new();
+            let old_formula = String::new();
+            
+            // Check if the cell is in the current viewport
+            if cell_row >= current_row && cell_row < current_row + DIM &&
+               cell_col >= current_col && cell_col < current_col + DIMB {
+                let local_row = cell_row - current_row;
+                let local_col = cell_col - current_col;
+                
+                // We can safely save the current state for undo
+                let table_data: Arc<Vec<Vec<Arc<CellData>>>> = Arc::new(
+                    (0..DIM)
+                    .map(|_| {
+                        (0..DIMB)
+                        .map(|_| {
+                            Arc::new(CellData {
+                                value: RwSignal::new(String::new()),
+                                formula: RwSignal::new(String::new()),
+                            })
+                        })
+                        .collect()
+                    })
+                    .collect(),
+                );
+                
+                let old_value = table_data[local_row][local_col].value.get();
+                let old_formula = table_data[local_row][local_col].formula.get();
+                
+                // Add to undo stack
+                if let Ok(mut undo_stack) = UNDO_STACK.lock() {
+                    undo_stack.push_front(HistoryAction {
+                        cmd: EditCommandType::Paste,
+                        formula: formula.clone(),
+                        cell_row,
+                        cell_col,
+                        old_value,
+                        old_formula,
+                    });
+                    
+                    // If undo stack is too large, remove oldest actions
+                    while undo_stack.len() > MAX_HISTORY {
+                        undo_stack.pop_back();
+                    }
+                }
+                
+                // Clear the redo stack as new actions invalidate previous redos
+                if let Ok(mut redo_stack) = REDO_STACK.lock() {
+                    redo_stack.clear();
+                }
+            }
+            
             let cell_data = Arc::new(CellData {
                 value: RwSignal::new(formula.clone()),
                 formula: RwSignal::new(formula),
