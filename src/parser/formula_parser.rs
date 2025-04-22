@@ -137,3 +137,78 @@ impl FormulaParser {
         Ok(CellRange { top_left, bottom_right })
     }
 }
+
+
+
+#[cfg(test)]
+mod tests {
+    use super::super::formula_parser::FormulaParser;
+    use crate::common::expression::Expression;
+    use crate::common::structs::AbsCell;
+
+    #[test]
+    fn test_basic_formula() {
+        let parser = FormulaParser::new(1000, 26);
+        let cell = AbsCell::new(1, 1);
+        let formula = "A1 + SUM(B1:Z9) + 1.0 - .3";
+        let result = parser.parse(formula, cell);
+        assert!(result.is_ok(), "Failed to parse: {}", formula);
+    }
+
+    #[test]
+    fn test_negative_number() {
+        let parser = FormulaParser::new(1000, 26);
+        let cell = AbsCell::new(1, 1);
+        let formula = "-.75";
+        let result = parser.parse(formula, cell);
+        assert!(result.is_ok(), "Failed to parse: {}", formula);
+
+        if let Ok(expr) = result {
+            match expr {
+                Expression::Number(value) => assert_eq!(value, -0.75),
+                _ => panic!("Expected Number expression"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_complex_expression() {
+        let parser = FormulaParser::new(1000, 26);
+        let cell = AbsCell::new(1, 1);
+        let formula = "A1 * 2 + (B2 - C3) / 4";
+        let result = parser.parse(formula, cell);
+        assert!(result.is_ok(), "Failed to parse: {}", formula);
+    }
+
+    #[test]
+    fn test_invalid_range() {
+        let parser = FormulaParser::new(1000, 26);
+        let formula = "SUM(Z9:A1)";  // Bottom-right should be below and to the right of top-left
+        let cell = AbsCell::new(1, 1);
+        
+        let result = parser.parse(formula, cell);
+        assert!(result.is_err(), "Should fail with invalid range");
+    }
+
+    #[test]
+    fn test_out_of_bounds() {
+        let parser = FormulaParser::new(1000, 26);
+        // Column AA is beyond our 26-column limit (A-Z)
+        let formula = "AA1 + B2";
+        let cell = AbsCell::new(1, 1);
+        
+        let result = parser.parse(formula, cell);
+        assert!(result.is_err(), "Should fail with out of bounds error");
+    }
+
+    #[test]
+    fn test_row_out_of_bounds() {
+        let parser = FormulaParser::new(1000, 26);
+        // Row 1001 is beyond our 1000-row limit
+        let formula = "A1001 + B2";
+        let cell = AbsCell::new(1, 1);
+        
+        let result = parser.parse(formula, cell);
+        assert!(result.is_err(), "Should fail with out of bounds error");
+    }
+}

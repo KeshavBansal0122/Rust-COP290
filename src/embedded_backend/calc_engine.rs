@@ -1,9 +1,9 @@
-use std::thread::sleep;
-use std::time::Duration;
 use crate::common::cell_value::{CellError, CellValue};
-use crate::common::expression::{CellRange, Expression, Operator, RangeFunction};
+use crate::common::expression::{Expression, Operator, RangeFunction};
 use crate::common::structs::AbsCell;
 use crate::embedded_backend::storage::Storage;
+use std::thread::sleep;
+use std::time::Duration;
 
 mod functions;
 

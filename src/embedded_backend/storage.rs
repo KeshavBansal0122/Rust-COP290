@@ -74,11 +74,6 @@ impl Storage {
         &self.graph.get(&cell).unwrap().dependents
     }
     
-    pub fn get_expression(&self, cell: AbsCell) -> Option<&Expression> {
-        let exp = self.values.get(&cell)?;
-        exp.formula.as_ref()
-    }
-    
     fn recalculate_cell(&mut self, cell: AbsCell) {
         let exp = self.values.get(&cell);
         if let Some(exp) = exp {
@@ -198,31 +193,7 @@ impl Storage {
         self.update_cells(cell);
         true
     }
-   
-    pub fn add_edges(&mut self, cell: AbsCell, expression: &Expression) {
-        let mut referenced_cells = HashSet::new();
-        Self::collect_referenced_cells(expression, cell, &mut referenced_cells);
-
-        for referenced_cell in referenced_cells {
-            self.graph
-                .entry(referenced_cell)
-                .or_default()
-                .dependents
-                .insert(cell);
-        }
-    }
     
-    pub fn remove_edges(&mut self, cell: AbsCell, expression: &Expression) {
-        let mut referenced_cells = HashSet::new();
-        Self::collect_referenced_cells(expression, cell, &mut referenced_cells);
-
-        for referenced_cell in referenced_cells {
-            if let Some(metadata) = self.graph.get_mut(&referenced_cell) {
-                metadata.dependents.remove(&cell);
-            }
-        }
-    }
-
     fn collect_referenced_cells(expression: &Expression, cell: AbsCell, referenced_cells: &mut HashSet<AbsCell>) {
         match expression {
             Expression::Cell(rel_cell) => {
@@ -385,6 +356,8 @@ impl<'a> Iterator for FullRangeIter<'a> {
         } else {
             self.current_cell.col = self.top_left.col;
             self.current_cell.row += 1;
+            let row_end = AbsCell::new(self.current_cell.row, self.bottom_right.col);
+            self.value_iter = self.values.range(self.current_cell..=row_end);
         }
 
         // Check if the next value from the BTree matches our current cell
