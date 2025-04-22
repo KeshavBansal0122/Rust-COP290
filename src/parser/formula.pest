@@ -1,0 +1,68 @@
+// file: src/parser/formula.pest
+// Spreadsheet formula parser grammar
+
+// Whitespace handling
+WHITESPACE = _{ " " | "\t" }
+
+// Numbers
+number = @{
+    "-"? ~ (
+        // Numbers with decimal point
+        (ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT*) |
+        // Numbers that start with decimal point
+        ("." ~ ASCII_DIGIT+) |
+        // Integers
+        ASCII_DIGIT+
+    )
+}
+
+// Cell references
+cell_ref = @{
+    // Column (one or more letters)
+    ASCII_ALPHA+ ~
+    // Row (one or more digits)
+    ASCII_DIGIT+
+}
+
+// Cell ranges A1:Z9
+cell_range = { cell_ref ~ ":" ~ cell_ref }
+
+// Range functions
+range_function_name = {
+    "MIN" | "MAX" | "AVG" | "SUM" | "STDEV"
+}
+
+range_function = {
+    range_function_name ~ "(" ~ cell_range ~ ")"
+}
+
+// Sleep function
+sleep_function = {
+    "SLEEP" ~ "(" ~ expression ~ ")"
+}
+
+// Function
+function = {
+    range_function | sleep_function
+}
+
+// Base terms
+term = {
+    number |
+    function |
+    cell_ref |
+    "(" ~ expression ~ ")"
+}
+
+// Operators
+add = { "+" }
+subtract = { "-" }
+multiply = { "*" }
+divide = { "/" }
+
+// Define operator precedence
+factor = { term ~ ((multiply | divide) ~ term)* }
+expression = { factor ~ ((add | subtract) ~ factor)* }
+
+// Main formula rule
+formula = { SOI ~ expression ~ EOI }
