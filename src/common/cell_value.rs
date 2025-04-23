@@ -7,7 +7,7 @@ pub enum CellError {
     DependsOnNonNumeric,
     DependsOnErr
 }
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub enum CellValue {
     #[default]
     Empty,
@@ -15,7 +15,7 @@ pub enum CellValue {
     Number(f64),
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct CellData {
     pub value: Result<CellValue, CellError>,
     pub formula: Option<Expression>,

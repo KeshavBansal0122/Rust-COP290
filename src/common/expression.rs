@@ -1,7 +1,8 @@
 use std::fmt::{self, Display};
+use serde::{Deserialize, Serialize};
 use crate::common::structs::{AbsCell, RelCell};
 
-#[derive(Copy, Clone, Debug, Hash, PartialEq)]
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Serialize, Deserialize)]
 pub enum Operator {
     Add,
     Subtract,
@@ -9,7 +10,7 @@ pub enum Operator {
     Divide,
 }
 
-#[derive(Copy, Clone, Debug, Hash, PartialEq)]
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Serialize, Deserialize)]
 pub enum RangeFunction {
     Min,
     Max,
@@ -18,13 +19,13 @@ pub enum RangeFunction {
     Stdev,
 }
 
-#[derive(Clone, Debug, Hash, PartialEq)]
+#[derive(Clone, Debug, Hash, PartialEq, Serialize, Deserialize)]
 pub struct CellRange {
     pub top_left: RelCell,
     pub bottom_right: RelCell,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Expression {
     Number(f64),
     Cell(RelCell),
@@ -60,7 +61,7 @@ impl Display for RangeFunction {
 }
 
 impl CellRange {
-    fn to_string(&self, cell: AbsCell) -> String {
+    pub fn to_string(&self, cell: AbsCell) -> String {
         let tl = self.top_left.to_abs(cell);
         let br = self.bottom_right.to_abs(cell);
         format!("{}:{}", tl, br)
@@ -68,7 +69,7 @@ impl CellRange {
 }
 
 impl Expression {
-    fn to_string(&self, cell: AbsCell) -> String {
+    pub fn to_string(&self, cell: AbsCell) -> String {
         match self {
             Expression::Number(n) => format!("{}", n),
             Expression::Cell(c) => format!("{}", c.to_abs(cell)),

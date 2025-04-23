@@ -4,8 +4,10 @@ use crate::common::expression::Expression;
 use crate::common::structs::AbsCell;
 use crate::embedded_backend::calc_engine::evaluate;
 use std::collections::{BTreeMap, HashMap, HashSet};
+use serde::{Deserialize, Serialize};
+use crate::embedded_backend::structs::CellInput;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct Storage {
     values: BTreeMap<AbsCell, CellData>,
     graph: HashMap<AbsCell, CellMetadata>,
@@ -243,6 +245,40 @@ impl Storage {
         }
         false
     }
+    
+    pub fn get_input(&self, cell: AbsCell) -> CellInput {
+        let val = self.values.get(&cell);
+        match val {
+            None => CellInput::Value(CellValue::Empty),
+            Some(data) => {
+                if let Some(formula) = &data.formula {
+                    CellInput::Formula(formula.to_string(cell))
+                } else { 
+                    CellInput::Value(data.value.as_ref().unwrap().clone())
+                }
+            }
+        }
+    }
+    
+    pub fn copy_cell_expression(&mut self, from: AbsCell, to: AbsCell) -> bool {
+        let cell_data = self.values.get(&from);
+        match cell_data { 
+            Some(data) => {
+                if let Some(formula) = &data.formula {
+                    self.set_expression(to, formula.clone())
+                } else {
+                    let val = data.value.as_ref().unwrap().clone();
+                    self.set_value(to, val);
+                    true
+                }
+            }
+            None => {
+                self.set_value(to, CellValue::Empty);
+                true
+            }
+        }
+    }
+    
 }
 
 
