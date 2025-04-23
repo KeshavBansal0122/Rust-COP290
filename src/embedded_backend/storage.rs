@@ -309,11 +309,11 @@ impl Storage {
     /// # Returns
     ///
     /// * `Result<Self, io::Error>` - Ok with the deserialized Storage if successful, Err if an error occurs.
-    pub fn deserialize_from_file(file: File) -> io::Result<Self> {
+    pub fn from_file(file: &File) -> io::Result<Self> {
         let reader = io::BufReader::new(file);
         bincode::deserialize_from(reader).map_err(|e| io::Error::new(io::ErrorKind::Other, e))
     }
-    
+
     pub fn search_from_start(&self, to_search: &str) -> Option<AbsCell> {
         self.search(AbsCell::new(0,-1), to_search)
     }
@@ -323,11 +323,11 @@ impl Storage {
                 AbsCell::new(start.row + 1, 0)
             } else { AbsCell::new(start.row, start.col+1) }
         };
-        
-        if next_cell.row >= (self.rows - 1) as i16 { 
+
+        if next_cell.row >= (self.rows - 1) as i16 {
             return None;
         }
-        
+
         for (cell, value) in self.values.range(next_cell..) {
             match &value.value {
                 Ok(CellValue::String(text)) => {

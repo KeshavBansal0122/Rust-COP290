@@ -3,6 +3,9 @@ use crate::common::structs::AbsCell;
 use crate::embedded_backend::storage::Storage;
 use crate::embedded_backend::structs::{Action, CellInput};
 use crate::parser::formula_parser::FormulaParser;
+use std::fs::File;
+use std::io;
+use std::path::Path;
 
 #[derive(Debug)]
 pub enum ExpressionError {
@@ -17,6 +20,7 @@ pub struct EmbeddedBackend {
 }
 
 impl EmbeddedBackend {
+    
     pub fn new(rows: u16, cols: u16) -> Self {
         EmbeddedBackend {
             storage: Storage::new(rows, cols),
@@ -25,10 +29,24 @@ impl EmbeddedBackend {
             redo_stack: Vec::new(),
         }
     }
+    
+    pub fn from_file(file: &File) -> io::Result<Self> {
+        let storage = Storage::from_file(file)?;
+        Ok(EmbeddedBackend {
+            storage,
+            parser: FormulaParser::new(0, 0),
+            undo_stack: Vec::new(),
+            redo_stack: Vec::new(),
+        })
+    }
+    
+    pub fn save_to_file(&self, file: &File) -> io::Result<()> {
+        self.storage.serialize_to_file(file)
+    }
     pub fn set_cell_empty(&mut self, cell: AbsCell) {
         self.set_cell_value(cell, CellValue::Empty);
     }
-
+    
     pub fn set_cell_value(&mut self, cell: AbsCell, value: CellValue) {
         let old = self.storage.get_input(cell);
         let new = CellInput::Value(value.clone());
@@ -43,33 +61,25 @@ impl EmbeddedBackend {
             self.redo_stack.clear();
         }
     }
-
+    
     pub fn get_cell_value(&self, cell: AbsCell) -> &Result<CellValue, CellError> {
         self.storage.get_value(cell)
     }
-
-    pub fn get_cell_range(
-        &self,
-        top_left: AbsCell,
-        bottom_right: AbsCell,
+    
+    pub fn get_cell_range(&self,
+                          top_left: AbsCell,
+                          bottom_right: AbsCell
     ) -> impl Iterator<Item = (AbsCell, &Result<CellValue, CellError>)> {
         self.storage.get_value_range_full(top_left, bottom_right)
     }
-
-    pub fn set_cell_formula(
-        &mut self,
-        cell: AbsCell,
-        formula: &str,
-    ) -> Result<(), ExpressionError> {
-        let new = self
-            .parser
-            .parse(formula, cell)
-            .map_err(|_| ExpressionError::InvalidExpression)?;
+    
+    pub fn set_cell_formula(&mut self, cell: AbsCell, formula: &str) -> Result<(), ExpressionError> {
+        let new = self.parser.parse(formula, cell).map_err(|_| ExpressionError::InvalidExpression)?;
         let old = self.storage.get_input(cell);
-
+        
         if !self.storage.set_expression(cell, new) {
             Err(ExpressionError::CircularReference)
-        } else {
+        } else { 
             let action = Action {
                 cell,
                 old_value: old,
@@ -82,7 +92,7 @@ impl EmbeddedBackend {
             Ok(())
         }
     }
-
+    
     /// Returns true if the undo stack was not empty and undo actually happened
     pub fn undo(&mut self) -> bool {
         if let Some(action) = self.undo_stack.pop() {
@@ -102,7 +112,7 @@ impl EmbeddedBackend {
             false
         }
     }
-
+    
     /// Returns true if the redo stack was not empty and redo actually happened
     pub fn redo(&mut self) -> bool {
         if let Some(action) = self.redo_stack.pop() {
@@ -122,42 +132,58 @@ impl EmbeddedBackend {
             false
         }
     }
-
-    pub fn copy_cell_expression(
-        &mut self,
-        from: AbsCell,
-        to: AbsCell,
-    ) -> Result<(), ExpressionError> {
+    
+    pub fn copy_cell_expression(&mut self, from: AbsCell, to: AbsCell) -> Result<(), ExpressionError> {
         if self.storage.copy_cell_expression(from, to) {
             Ok(())
         } else {
             Err(ExpressionError::CircularReference)
         }
     }
-
+    
+    
     pub fn search(&self, cell: AbsCell, to_search: &str) -> Option<AbsCell> {
         self.storage.search(cell, to_search)
     }
-
+    
     pub fn search_from_start(&self, to_search: &str) -> Option<AbsCell> {
         self.storage.search_from_start(to_search)
     }
-    /// Returns the cell affected by the last undo operation
-    pub fn get_last_undone_cell(&self) -> Option<AbsCell> {
-        if !self.redo_stack.is_empty() {
-            // The last action that was undone is now at the top of the redo stack
-            Some(self.redo_stack.last().unwrap().cell)
-        } else {
-            None
+    
+    /// Saves a rectangular range of cells to a CSV file.
+    ///
+    /// # Arguments
+    /// * `top_left` - The top-left cell of the range.
+    /// * `bottom_right` - The bottom-right cell of the range.
+    /// * `file_path` - The path to the CSV file where the data will be saved.
+    ///
+    /// # Returns
+    /// * `Result<(), std::io::Error>` - Ok if successful, Err if an error occurs.
+    pub fn save_range_to_csv(
+        &self,
+        top_left: AbsCell,
+        bottom_right: AbsCell,
+        file_path: &Path,
+    ) -> Result<(), std::io::Error> {
+        let mut writer = csv::Writer::from_path(file_path)?;
+
+        for row in top_left.row..=bottom_right.row {
+            let mut csv_row = Vec::new();
+            for col in top_left.col..=bottom_right.col {
+                let cell = AbsCell::new(row, col);
+                let value = self.get_cell_value(cell);
+                let cell_content = match value {
+                    Ok(CellValue::Empty) => "".to_string(),
+                    Ok(CellValue::Number(num)) => num.to_string(),
+                    Ok(CellValue::String(text)) => text.clone(),
+                    Err(_) => "#ERROR".to_string(),
+                };
+                csv_row.push(cell_content);
+            }
+            writer.write_record(csv_row)?;
         }
-    }
-    /// Returns the cell affected by the last redo operation
-    pub fn get_last_redone_cell(&self) -> Option<AbsCell> {
-        if !self.undo_stack.is_empty() {
-            // The last action that was redone is now at the top of the undo stack
-            Some(self.undo_stack.last().unwrap().cell)
-        } else {
-            None
-        }
+
+        writer.flush()?;
+        Ok(())
     }
 }
