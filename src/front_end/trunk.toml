@@ -1,0 +1,7 @@
+trunk-version= "*"
+[build]
+target = "static/index.html"
+
+
+[serve]
+open = true
