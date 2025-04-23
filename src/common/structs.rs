@@ -16,7 +16,7 @@ pub struct RelCell {
 }
 
 impl AbsCell {
-    pub fn new(row: i16, col: i16) -> Self {
+     pub const fn new(row: i16, col: i16) -> Self {
         
         AbsCell { row, col }
     }
@@ -39,6 +39,20 @@ impl AbsCell {
         RelCell {
             row: self.row - origin.row,
             col: self.col - origin.col,
+        }
+    }
+    
+    pub fn to_0_based(&self) -> Self {
+        AbsCell {
+            row: self.row - 1,
+            col: self.col - 1,
+        }
+    }
+    
+    pub fn to_1_based(&self) -> Self {
+        AbsCell {
+            row: self.row + 1,
+            col: self.col + 1,
         }
     }
 }

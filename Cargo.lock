@@ -82,6 +82,7 @@ version = "0.1.0"
 dependencies = [
  "bincode",
  "csv",
+ "once_cell",
  "pest",
  "pest_derive",
  "pest_generator",

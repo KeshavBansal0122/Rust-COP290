@@ -1,3 +1,4 @@
+#[allow(dead_code)]
 use embedded::common::cell_value::{CellError, CellValue};
 use embedded::common::structs::AbsCell;
 use embedded::embedded_backend::single_threaded::{EmbeddedBackend, ExpressionError};
@@ -19,12 +20,6 @@ lazy_static::lazy_static! {
     static ref BACKEND: Mutex<EmbeddedBackend> = Mutex::new(EmbeddedBackend::new(MAX_ROWS as u16, MAX_COLS as u16));
 }
 
-#[derive(Clone)]
-enum EditCommandType {
-    Edit,
-    Cut,
-    Paste,
-}
 
 fn get_column_name(mut index: usize) -> String {
     let mut name = String::new();
@@ -79,7 +74,7 @@ enum EditCommand {
 }
 
 #[derive(Clone)]
-struct CellData {
+struct CellDataF {
     value: RwSignal<String>,
     formula: RwSignal<String>,
 }
@@ -87,176 +82,193 @@ fn call_backend(
     cmd: EditCommand,
     current_row: usize,
     current_col: usize,
-) -> Vec<(Arc<CellData>, usize, usize)> {
+) -> Vec<(Arc<CellDataF>, usize, usize)> {
     match cmd {
         EditCommand::ViewPort => {
-            // Fetch data from the viewport range using the backend
             let mut result = vec![];
 
-            if let Ok(backend) = BACKEND.lock() {
-                // Get cell range for the current viewport
-                let top_left = AbsCell::new(current_row as i16, current_col as i16);
-                let bottom_right = AbsCell::new(
-                    (current_row + DIM - 1) as i16,
-                    (current_col + DIMB - 1) as i16,
-                );
+if let Ok(backend) = BACKEND.lock() {
+    // Get cell range for the current viewport
+    let top_left = AbsCell::new(current_row as i16, current_col as i16);
+    let bottom_right = AbsCell::new(
+        (current_row + DIM - 1) as i16,
+        (current_col + DIMB - 1) as i16,
+    );
 
-                // Iterate through cells in the range
-                for (cell, value) in backend.get_cell_range(top_left, bottom_right) {
-                    let r = cell.row as usize;
-                    let c = cell.col as usize;
+    // Iterate through cells in the range
+    for (cell, cell_data) in backend.get_cell_range(top_left, bottom_right) {
+        let r = cell.row as usize;
+        let c = cell.col as usize;
 
-                    // Convert CellValue to string representation
-                    let display_value = match value {
-                        Ok(CellValue::String(s)) => s.clone(),
-                        Ok(CellValue::Number(n)) => n.to_string(),
-                        Ok(CellValue::Empty) => String::new(),
-                        Err(CellError::DivideByZero) => "#DIV/0!".to_string(),
-                        Err(CellError::DependsOnNonNumeric) => "#ERROR!".to_string(),
-                        Err(CellError::DependsOnErr) => "#ERROR!".to_string(),
-                        _ => "#ERROR!".to_string(),
-                    };
+        // Convert CellValue to string representation
+        let display_value = match &cell_data.value {
+            Ok(CellValue::String(s)) => s.clone(),
+            Ok(CellValue::Number(n)) => n.to_string(),
+            Ok(CellValue::Empty) => String::new(),
+            Err(CellError::DivideByZero) => "#DIV/0!".to_string(),
+            Err(CellError::DependsOnNonNumeric) => "#ERROR!".to_string(),
+            Err(CellError::DependsOnErr) => "#ERROR!".to_string(),
+        };
 
-                    let cell_data = Arc::new(CellData {
-                        value: RwSignal::new(display_value.clone()),
-                        formula: RwSignal::new(display_value),
-                    });
+        // Convert formula to string representation
+        let formula = match &cell_data.formula {
+            Some(expr) => format!("={:?}", expr), // Assuming Expression implements Display
+            None => String::new(),
+        };
 
-                    result.push((cell_data, r, c));
-                }
-            }
+        let cell_data_f = Arc::new(CellDataF {
+            value: RwSignal::new(display_value),
+            formula: RwSignal::new(formula),
+        });
 
-            result
+        result.push((cell_data_f, r, c));
+    }
+}
+
+result
         }
         EditCommand::Undo => {
             // Use the backend's native undo functionality
             let mut result = vec![];
 
-            if let Ok(mut backend) = BACKEND.lock() {
-                // Call the backend's undo method
-                if backend.undo() {
-                    // Get the cell that was affected by the undo operation
-                    if let Some(cell) = backend.get_last_undone_cell() {
-                        let r = cell.row as usize;
-                        let c = cell.col as usize;
+            // if let Ok(mut backend) = BACKEND.lock() {
+            //     // Call the backend's undo method
+            //     if backend.undo() {
+            //         // Get the cell that was affected by the undo operation
+            //         if let Some(cell) = backend.get_last_undone_cell() {
+            //             let r = cell.row as usize;
+            //             let c = cell.col as usize;
 
-                        // Get the updated value for the specific cell
-                        let value = backend.get_cell_value(cell);
+            //             // Get the updated value for the specific cell
+            //             let value = backend.get_cell_value(cell);
 
-                        // Convert CellValue to string representation
-                        let display_value = match value {
-                            Ok(CellValue::String(s)) => s.clone(),
-                            Ok(CellValue::Number(n)) => n.to_string(),
-                            Ok(CellValue::Empty) => String::new(),
-                            Err(CellError::DivideByZero) => "#DIV/0!".to_string(),
-                            Err(CellError::DependsOnNonNumeric) => "#ERROR!".to_string(),
-                            Err(CellError::DependsOnErr) => "#ERROR!".to_string(),
-                            _ => "#ERROR!".to_string(),
-                        };
+            //             // Convert CellValue to string representation
+            //             let display_value = match value {
+            //                 Ok(CellValue::String(s)) => s.clone(),
+            //                 Ok(CellValue::Number(n)) => n.to_string(),
+            //                 Ok(CellValue::Empty) => String::new(),
+            //                 Err(CellError::DivideByZero) => "#DIV/0!".to_string(),
+            //                 Err(CellError::DependsOnNonNumeric) => "#ERROR!".to_string(),
+            //                 Err(CellError::DependsOnErr) => "#ERROR!".to_string(),
+            //                 _ => "#ERROR!".to_string(),
+            //             };
 
-                        // Create the cell data
-                        let cell_data = Arc::new(CellData {
-                            value: RwSignal::new(display_value.clone()),
-                            formula: RwSignal::new(display_value),
-                        });
+            //             // Create the cell data
+            //             let cell_data = Arc::new(CellDataF {
+            //                 value: RwSignal::new(display_value.clone()),
+            //                 formula: RwSignal::new(display_value),
+            //             });
 
-                        result.push((cell_data, r, c));
-                    }
-                }
-            }
+            //             result.push((cell_data, r, c));
+            //         }
+            //     }
+            // }
 
             result
         }
         EditCommand::Redo => {
-            // Use the backend's native redo functionality
+        //     // Use the backend's native redo functionality
             let mut result = vec![];
 
-            if let Ok(mut backend) = BACKEND.lock() {
-                // Call the backend's redo method
-                if backend.redo() {
-                    // Get the cell that was affected by the redo operation
-                    if let Some(cell) = backend.get_last_redone_cell() {
-                        let r = cell.row as usize;
-                        let c = cell.col as usize;
+        //     if let Ok(mut backend) = BACKEND.lock() {
+        //         // Call the backend's redo method
+        //         if backend.redo() {
+        //             // Get the cell that was affected by the redo operation
+        //             if let Some(cell) = backend.get_last_redone_cell() {
+        //                 let r = cell.row as usize;
+        //                 let c = cell.col as usize;
 
-                        // Get the updated value for the specific cell
-                        let value = backend.get_cell_value(cell);
+        //                 // Get the updated value for the specific cell
+        //                 let value = backend.get_cell_value(cell);
 
-                        // Convert CellValue to string representation
-                        let display_value = match value {
-                            Ok(CellValue::String(s)) => s.clone(),
-                            Ok(CellValue::Number(n)) => n.to_string(),
-                            Ok(CellValue::Empty) => String::new(),
-                            Err(CellError::DivideByZero) => "#DIV/0!".to_string(),
-                            Err(CellError::DependsOnNonNumeric) => "#ERROR!".to_string(),
-                            Err(CellError::DependsOnErr) => "#ERROR!".to_string(),
-                            _ => "#ERROR!".to_string(),
-                        };
+        //                 // Convert CellValue to string representation
+        //                 let display_value = match value {
+        //                     Ok(CellValue::String(s)) => s.clone(),
+        //                     Ok(CellValue::Number(n)) => n.to_string(),
+        //                     Ok(CellValue::Empty) => String::new(),
+        //                     Err(CellError::DivideByZero) => "#DIV/0!".to_string(),
+        //                     Err(CellError::DependsOnNonNumeric) => "#ERROR!".to_string(),
+        //                     Err(CellError::DependsOnErr) => "#ERROR!".to_string(),
+        //                     _ => "#ERROR!".to_string(),
+        //                 };
 
-                        // Create the cell data for the UI update
-                        let cell_data = Arc::new(CellData {
-                            value: RwSignal::new(display_value.clone()),
-                            formula: RwSignal::new(display_value),
-                        });
+        //                 // Create the cell data for the UI update
+        //                 let cell_data = Arc::new(CellDataF {
+        //                     value: RwSignal::new(display_value.clone()),
+        //                     formula: RwSignal::new(display_value),
+        //                 });
 
-                        result.push((cell_data, r, c));
-                    }
-                }
-            }
+        //                 result.push((cell_data, r, c));
+        //             }
+        //         }
+        //     }
 
             result
+        
         }
         EditCommand::EditCell {
             formula,
             cell_row,
             cell_col,
         } => {
-            // Update the cell in the backend
-            if let Ok(mut backend) = BACKEND.lock() {
-                let cell = AbsCell::new(cell_row as i16, cell_col as i16);
+            let mut result = vec![];
 
-                // Process the formula or value - backend will handle undo/redo stacks
-                if formula.starts_with("=") {
-                    let _ = backend.set_cell_formula(cell, &formula);
-                } else if formula.is_empty() {
-                    backend.set_cell_empty(cell);
+            if let Ok(mut backend) = BACKEND.lock() {
+                // Build the selected cell correctly
+                let sel_cell = AbsCell::new(cell_row as i16, cell_col as i16);
+
+                if formula.starts_with('=') {
+                    let _ =backend.set_cell_formula(sel_cell, &formula[1..].to_string());
+
                 } else {
-                    // Try to convert to appropriate type
-                    if let Ok(num) = formula.parse::<f64>() {
-                        backend.set_cell_value(cell, CellValue::Number(num));
-                    } else if formula == "true" || formula == "false" {
-                        // Since Boolean isn't a variant, store as String
-                        backend.set_cell_value(cell, CellValue::String(formula.clone()));
-                    } else {
-                        backend.set_cell_value(cell, CellValue::String(formula.clone()));
+                    match formula.parse::<f64>() {
+                        Ok(num) => {
+                            let _ = backend.set_cell_value(sel_cell, CellValue::Number(num));
+                        }
+                        Err(_) => {
+                            let _ = backend.set_cell_value(sel_cell, CellValue::String(formula.clone()));
+                        }
                     }
                 }
 
-                // Get the updated value for the UI
-                let result = backend.get_cell_value(cell);
-                let display_value = match result {
-                    Ok(CellValue::String(s)) => s.clone(),
-                    Ok(CellValue::Number(n)) => n.to_string(),
-                    Ok(CellValue::Empty) => String::new(),
-                    Err(CellError::DivideByZero) => "#DIV/0!".to_string(),
-                    Err(CellError::DependsOnNonNumeric) => "#ERROR!".to_string(),
-                    Err(CellError::DependsOnErr) => "#ERROR!".to_string(),
-                    _ => "#ERROR!".to_string(),
-                };
+                // Define the viewport
+                let top_left = AbsCell::new(current_row as i16, current_col as i16);
+                let bottom_right = AbsCell::new(
+                    (current_row + DIM - 1) as i16,
+                    (current_col + DIMB - 1) as i16,
+                );
 
-                let cell_data = Arc::new(CellData {
-                    value: RwSignal::new(display_value.clone()),
-                    formula: RwSignal::new(formula),
-                });
-                return vec![(cell_data, cell_row, cell_col)];
+                // Iterate through the updated range
+                for (cell, cell_data) in backend.get_cell_range(top_left, bottom_right) {
+                    let r = cell.row as usize;
+                    let c = cell.col as usize;
+
+                    // Convert CellValue → display string
+                    let display_value = match &cell_data.value {
+                        Ok(CellValue::String(s)) => s.clone(),
+                        Ok(CellValue::Number(n)) => n.to_string(),
+                        Ok(CellValue::Empty)    => String::new(),
+                        Err(CellError::DivideByZero)        => "#DIV/0!".to_string(),
+                        Err(CellError::DependsOnNonNumeric) => "#ERROR!".to_string(),
+                        Err(CellError::DependsOnErr)        => "#ERROR!".to_string(),
+                    };
+
+                    // Convert optional Expression → formula string
+                    let formula_str = match &cell_data.formula {
+                        Some(expr) => format!("={:?}", expr),  // assuming Expression: Display
+                        None       => String::new(),
+                    };
+
+                    let cell_data_f = Arc::new(CellDataF {
+                        value:   RwSignal::new(display_value),
+                        formula: RwSignal::new(formula_str),
+                    });
+
+                    result.push((cell_data_f, r, c));
+                }
             }
 
-            // Fallback if backend lock fails
-            let cell_data = Arc::new(CellData {
-                value: RwSignal::new(formula.clone()),
-                formula: RwSignal::new(formula),
-            });
-            vec![(cell_data, cell_row, cell_col)]
+            result
         }
 
         EditCommand::Cut { cell_row, cell_col } => {
@@ -295,7 +307,7 @@ fn call_backend(
                 backend.set_cell_empty(cell);
             }
 
-            let cell_data = Arc::new(CellData {
+            let cell_data = Arc::new(CellDataF {
                 value: RwSignal::new(String::new()),
                 formula: RwSignal::new(String::new()),
             });
@@ -371,7 +383,7 @@ fn call_backend(
                     _ => "#ERROR!".to_string(),
                 };
 
-                let cell_data = Arc::new(CellData {
+                let cell_data = Arc::new(CellDataF {
                     value: RwSignal::new(display_value),
                     formula: RwSignal::new(formula),
                 });
@@ -379,7 +391,7 @@ fn call_backend(
             }
 
             // Fallback if backend lock fails
-            let cell_data = Arc::new(CellData {
+            let cell_data = Arc::new(CellDataF {
                 value: RwSignal::new(formula.clone()),
                 formula: RwSignal::new(formula),
             });
@@ -413,7 +425,7 @@ fn call_backend(
 
                     // Return the found cell for viewport adjustments and highlighting
                     return vec![(
-                        Arc::new(CellData {
+                        Arc::new(CellDataF {
                             value: RwSignal::new("SEARCH_RESULT".to_string()),
                             formula: RwSignal::new("SEARCH_RESULT".to_string()),
                         }),
@@ -430,7 +442,7 @@ fn call_backend(
 
 fn handle_edit_commands(
     cmd: EditCommand,
-    table_data: &Arc<Vec<Vec<Arc<CellData>>>>,
+    table_data: &Arc<Vec<Vec<Arc<CellDataF>>>>,
     current_row: usize,
     current_col: usize,
 ) -> Vec<(usize, usize)> {
@@ -477,12 +489,12 @@ pub fn Spreadsheet() -> impl IntoView {
     let (search_query, set_search_query) = signal(String::new());
     let (last_found_cell, set_last_found_cell) = signal::<Option<(usize, usize)>>(None);
 
-    let table_data: Arc<Vec<Vec<Arc<CellData>>>> = Arc::new(
+    let table_data: Arc<Vec<Vec<Arc<CellDataF>>>> = Arc::new(
         (0..DIM)
             .map(|_| {
                 (0..DIMB)
                     .map(|_| {
-                        Arc::new(CellData {
+                        Arc::new(CellDataF {
                             value: RwSignal::new(String::new()),
                             formula: RwSignal::new(String::new()),
                         })
