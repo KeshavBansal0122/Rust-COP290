@@ -71,6 +71,11 @@ enum EditCommand {
         cell_row: usize,
         cell_col: usize,
     },
+    Search {
+        query: String,
+        from_start: bool,
+        current_cell: Option<(usize, usize)>,
+    },
 }
 
 #[derive(Clone)]
@@ -126,7 +131,7 @@ fn call_backend(
         EditCommand::Undo => {
             // Use the backend's native undo functionality
             let mut result = vec![];
-            
+
             if let Ok(mut backend) = BACKEND.lock() {
                 // Call the backend's undo method
                 if backend.undo() {
@@ -134,10 +139,10 @@ fn call_backend(
                     if let Some(cell) = backend.get_last_undone_cell() {
                         let r = cell.row as usize;
                         let c = cell.col as usize;
-                        
+
                         // Get the updated value for the specific cell
                         let value = backend.get_cell_value(cell);
-                        
+
                         // Convert CellValue to string representation
                         let display_value = match value {
                             Ok(CellValue::String(s)) => s.clone(),
@@ -159,13 +164,13 @@ fn call_backend(
                     }
                 }
             }
-            
+
             result
         }
         EditCommand::Redo => {
             // Use the backend's native redo functionality
             let mut result = vec![];
-            
+
             if let Ok(mut backend) = BACKEND.lock() {
                 // Call the backend's redo method
                 if backend.redo() {
@@ -173,10 +178,10 @@ fn call_backend(
                     if let Some(cell) = backend.get_last_redone_cell() {
                         let r = cell.row as usize;
                         let c = cell.col as usize;
-                        
+
                         // Get the updated value for the specific cell
                         let value = backend.get_cell_value(cell);
-                        
+
                         // Convert CellValue to string representation
                         let display_value = match value {
                             Ok(CellValue::String(s)) => s.clone(),
@@ -198,7 +203,7 @@ fn call_backend(
                     }
                 }
             }
-            
+
             result
         }
         EditCommand::EditCell {
@@ -380,6 +385,46 @@ fn call_backend(
             });
             vec![(cell_data, cell_row, cell_col)]
         }
+        EditCommand::Search {
+            query,
+            from_start,
+            current_cell,
+        } => {
+            // Use backend's search functionality
+            let mut result = vec![];
+
+            if let Ok(backend) = BACKEND.lock() {
+                let found_cell = if from_start {
+                    // Search from the beginning of the spreadsheet
+                    backend.search_from_start(&query)
+                } else if let Some((row, col)) = current_cell {
+                    // Continue search from the current cell
+                    let cell = AbsCell::new(row as i16, col as i16);
+                    backend.search(cell, &query)
+                } else {
+                    // If no current cell is provided, start from the beginning
+                    backend.search_from_start(&query)
+                };
+
+                // Process the search result if a cell is found
+                if let Some(cell) = found_cell {
+                    let r = cell.row as usize;
+                    let c = cell.col as usize;
+
+                    // Return the found cell for viewport adjustments and highlighting
+                    return vec![(
+                        Arc::new(CellData {
+                            value: RwSignal::new("SEARCH_RESULT".to_string()),
+                            formula: RwSignal::new("SEARCH_RESULT".to_string()),
+                        }),
+                        r,
+                        c,
+                    )];
+                }
+            }
+
+            result
+        }
     }
 }
 
@@ -388,10 +433,21 @@ fn handle_edit_commands(
     table_data: &Arc<Vec<Vec<Arc<CellData>>>>,
     current_row: usize,
     current_col: usize,
-) {
+) -> Vec<(usize, usize)> {
     let updated_cells = call_backend(cmd, current_row, current_col);
+    let mut search_results = Vec::new();
 
     for (cell_data, target_row, target_col) in updated_cells {
+        // Check if this is a search result marker
+        if cell_data.value.get() == "SEARCH_RESULT" {
+            // Found a search result - add to the list for navigation
+            search_results.push((target_row, target_col));
+            
+            // Don't modify the table with the SEARCH_RESULT marker
+            continue;
+        }
+        
+        // Normal cell update - update if within current viewport
         if (target_row < current_row + DIM && target_row >= current_row)
             && (target_col < current_col + DIMB && target_col >= current_col)
         {
@@ -406,6 +462,8 @@ fn handle_edit_commands(
                 .set(cell_data.formula.get());
         }
     }
+    
+    search_results
 }
 
 #[component]
@@ -416,9 +474,8 @@ pub fn Spreadsheet() -> impl IntoView {
     let (check, set_check) = signal(String::new());
     let (formula, set_formula) = signal(String::new());
     let (clipboard, set_clipboard) = signal((String::new(), 1, 1));
-    // let key_buffer = RwSignal::new(String::new());
-    // let is_editing = RwSignal::new(false);
-    // let mode = RwSignal::new(Mode::Navigation);
+    let (search_query, set_search_query) = signal(String::new());
+    let (last_found_cell, set_last_found_cell) = signal::<Option<(usize, usize)>>(None);
 
     let table_data: Arc<Vec<Vec<Arc<CellData>>>> = Arc::new(
         (0..DIM)
@@ -439,6 +496,8 @@ pub fn Spreadsheet() -> impl IntoView {
     let table_data4 = Arc::clone(&table_data);
     let table_data5 = Arc::clone(&table_data);
     let table_data6 = Arc::clone(&table_data);
+    let table_data7 = Arc::clone(&table_data); // Additional clone for search_bar
+    let table_data8 = Arc::clone(&table_data); // Additional clone for search_bar button callback
 
     let input_refs: Arc<Vec<Vec<NodeRef<html::Input>>>> = Arc::new(
         (0..DIM)
@@ -516,6 +575,114 @@ pub fn Spreadsheet() -> impl IntoView {
         }
     };
 
+    let search_bar = move || {
+        let table_datai = Arc::clone(&table_data7);
+        let table_data_button = Arc::clone(&table_data8);
+        view! {
+            <div class="search-container">
+                <label>"Search: "</label>
+                <input
+                    type="text"
+                    placeholder="Enter search text..."
+                    prop:value=search_query
+                    on:input=move |e| {
+                        set_search_query.set(event_target_value(&e));
+                    }
+                    on:keydown=move |ev: KeyboardEvent| {
+                        if ev.key() == "Enter" {
+                            let query = search_query.get();
+                            if !query.is_empty() {
+                                // When pressing Enter, start a new search
+                                set_last_found_cell.set(None);
+                                let search_results = handle_edit_commands(
+                                    EditCommand::Search {
+                                        query,
+                                        from_start: true,
+                                        current_cell: None,
+                                    },
+                                    &table_datai,
+                                    current_row.get(),
+                                    current_col.get(),
+                                );
+                                if let Some((row, col)) = search_results.first() {
+                                    set_last_found_cell.set(Some((*row, *col)));
+                                }
+                            }
+                        }
+                    }
+                />
+                <button on:click=move |_| {
+                    let query = search_query.get();
+                    if !query.is_empty() {
+                        let last_cell = last_found_cell.get();
+                        let search_results = handle_edit_commands(
+                            EditCommand::Search {
+                                query: query.clone(),
+                                from_start: last_cell.is_none(),
+                                current_cell: last_cell,
+                            },
+                            &table_data_button,
+                            current_row.get(),
+                            current_col.get(),
+                        );
+                        
+                        if let Some((row, col)) = search_results.first() {
+                            // Found a match - navigate to it
+                            set_last_found_cell.set(Some((*row, *col)));
+                            
+                            // Move the viewport if the cell is outside current view
+                            let curr_row = current_row.get();
+                            let curr_col = current_col.get();
+                            
+                            if *row < curr_row || *row >= curr_row + DIM || 
+                               *col < curr_col || *col >= curr_col + DIMB {
+                                
+                                // Calculate new viewport position to center the found cell
+                                let new_row = (row.saturating_sub(DIM / 2)).max(1);
+                                let new_col = (col.saturating_sub(DIMB / 2)).max(1);
+                                
+                                set_current_row.set(new_row);
+                                set_current_col.set(new_col);
+                                
+                                // Refresh the viewport with the new position
+                                handle_edit_commands(
+                                    EditCommand::ViewPort,
+                                    &table_data_button,
+                                    new_row,
+                                    new_col,
+                                );
+                            }
+                            
+                            // Set the found cell as the selected cell
+                            let cell_id = format!("{}{}", get_column_name(*col), *row);
+                            set_source_cell.set(cell_id);
+                            
+                            // Also get the cell formula/value for display
+                            if let Ok(backend) = BACKEND.lock() {
+                                let cell = AbsCell::new(*row as i16, *col as i16);
+                                let value = backend.get_cell_value(cell);
+                                let display_value = match value {
+                                    Ok(CellValue::String(s)) => s.clone(),
+                                    Ok(CellValue::Number(n)) => n.to_string(),
+                                    Ok(CellValue::Empty) => String::new(),
+                                    Err(_) => "#ERROR!".to_string(),
+                                };
+                                set_formula.set(display_value);
+                            }
+                        } else {
+                            // No match found - show an alert using web_sys
+                            use web_sys::window;
+                            if let Some(window) = window() {
+                                let _ = window.alert_with_message("No matching results found");
+                            }
+                            set_last_found_cell.set(None);
+                        }
+                    }
+                }>"Search"</button>
+            </div>
+        }
+    };
+
     // Style for buttons side by side
     let buttons = {
         view! {
@@ -552,6 +719,23 @@ pub fn Spreadsheet() -> impl IntoView {
                                             row + current_row.get()
                                         );
                                         let is_active = cell_id == source_cell.get();
+                                        let is_search_result = last_found_cell.get().map(|(r, c)| 
+                                            r == row + current_row.get() && c == col + current_col.get()
+                                        ).unwrap_or(false);
+                                        
+                                        let cell_class = move || {
+                                            if is_active {
+                                                if is_search_result {
+                                                    "highlighted search-result"
+                                                } else {
+                                                    "highlighted"
+                                                }
+                                            } else if is_search_result {
+                                                "search-result"
+                                            } else {
+                                                ""
+                                            }
+                                        };
 
                                         view! {
                                             <td>
@@ -559,12 +743,7 @@ pub fn Spreadsheet() -> impl IntoView {
                                                 type="text"
                                                 prop:value=cell.value
                                                 node_ref=input_ref.clone()
-                                                class={move || if is_active {
-                                                    "highlighted"
-                                                        } else {
-                                                            ""
-                                                        }
-                                                    }
+                                                class={cell_class}
                                                 on:click=move |_| {
                                                     set_source_cell.set(cell_id.clone());
                                                     if cell.formula.get().is_empty() {
@@ -580,7 +759,6 @@ pub fn Spreadsheet() -> impl IntoView {
                                                 }
                                                 on:change=move |e| {
                                                     let input = event_target_value(&e);
-                                                    let hello=input.clone();
                                                     handle_edit_commands(
                                                         EditCommand::EditCell {
                                                             formula: String::from(input),
@@ -777,6 +955,7 @@ pub fn Spreadsheet() -> impl IntoView {
                         // on:input=move |e| set_formula.set(event_target_value(&e))
                     />
                 </div>
+                {search_bar}
                 {buttons}
             </div>
             <div>
