@@ -44,10 +44,11 @@ impl EmbeddedBackend {
         self.storage.serialize_to_file(file)
     }
     pub fn set_cell_empty(&mut self, cell: AbsCell) {
-        self.set_cell_value(cell, CellValue::Empty);
+        self.set_cell_value(cell.to_0_based(), CellValue::Empty);
     }
     
     pub fn set_cell_value(&mut self, cell: AbsCell, value: CellValue) {
+        let cell = cell.to_0_based();
         let old = self.storage.get_input(cell);
         let new = CellInput::Value(value.clone());
         let action = Action {
@@ -63,10 +64,13 @@ impl EmbeddedBackend {
     }
     
     pub fn get_cell_value(&self, cell: AbsCell) -> &Result<CellValue, CellError> {
+        let cell = cell.to_0_based();
         self.storage.get_value(cell)
     }
 
     pub fn get_cell_formula(&self, cell: AbsCell) -> Option<String> {
+        let cell = cell.to_0_based();
+        
         self.storage.get_cell_formula(cell)
     }
     
@@ -138,6 +142,8 @@ impl EmbeddedBackend {
     }
     
     pub fn copy_cell_expression(&mut self, from: AbsCell, to: AbsCell) -> Result<(), ExpressionError> {
+        let from = from.to_0_based();
+        let to = to.to_0_based();
         if self.storage.copy_cell_expression(from, to) {
             Ok(())
         } else {
