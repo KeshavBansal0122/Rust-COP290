@@ -191,3 +191,37 @@ impl EmbeddedBackend {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::common::cell_value::CellValue;
+    use crate::common::structs::AbsCell;
+    use std::str::FromStr;
+    // 
+    // #[test]
+    // fn test_new_backend() {
+    //     let backend = EmbeddedBackend::new(10, 10);
+    //     assert_eq!(backend.storage.get_rows(), 10);
+    //     assert_eq!(backend.storage.get_cols(), 10);
+    // }
+
+    #[test]
+    fn test_set_and_get_cell_value() {
+        let mut backend = EmbeddedBackend::new(10, 10);
+        let cell = AbsCell::new(0, 0);
+        backend.set_cell_value(cell, CellValue::Number(42.0));
+        assert_eq!(backend.get_cell_value(cell), &Ok(CellValue::Number(42.0)));
+    }
+
+    #[test]
+    fn test_set_and_get_cell_formula() {
+        let mut backend = EmbeddedBackend::new(10, 10);
+        let cell = AbsCell::from_str("C1").unwrap();
+        backend.set_cell_value(AbsCell::from_str("A1").unwrap(), CellValue::Number(42.0));
+        backend.set_cell_formula(cell, "A1+B1").unwrap();
+        println!("{:?}", backend.get_cell_formula(cell));
+        assert_eq!(backend.get_cell_value(cell), &Ok(CellValue::Number(42.0)));
+    }
+}
+

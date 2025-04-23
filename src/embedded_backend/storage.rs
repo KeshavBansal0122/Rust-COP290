@@ -18,6 +18,9 @@ pub struct Storage {
     graph: HashMap<AbsCell, CellMetadata>,
 }
 
+static EMPTY_HASHSET: once_cell::sync::Lazy<HashSet<AbsCell>> = once_cell::sync::Lazy::new(HashSet::new);
+
+
 impl Storage {
     
     pub fn new(rows: u16, cols: u16) -> Self {
@@ -48,8 +51,8 @@ impl Storage {
             let cell_data = self.values.entry(cell).or_default();
             cell_data.value = Ok(value);
         }
-        self.graph.remove(&cell);
-        self.recalculate_cell(cell);
+//        self.graph.remove(&cell);
+        self.update_cells(cell);
     }
     
     
@@ -84,7 +87,9 @@ impl Storage {
     }
     
     fn get_dep(&self, cell: AbsCell) -> &HashSet<AbsCell> {
-        &self.graph.get(&cell).unwrap().dependents
+        self.graph.get(&cell)
+            .map(|x| &x.dependents)
+            .unwrap_or(&EMPTY_HASHSET)
     }
     
     fn recalculate_cell(&mut self, cell: AbsCell) {
