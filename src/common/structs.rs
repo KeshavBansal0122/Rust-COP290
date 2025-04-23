@@ -16,9 +16,9 @@ pub struct RelCell {
 }
 
 impl AbsCell {
-    pub fn new(x: i16, y: i16) -> Self {
+    pub fn new(row: i16, col: i16) -> Self {
         
-        AbsCell { row: x, col: y }
+        AbsCell { row, col }
     }
     
     pub fn from_rel(target: RelCell, origin: AbsCell) -> Self {

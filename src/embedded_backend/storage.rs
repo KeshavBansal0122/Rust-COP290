@@ -3,25 +3,28 @@ use crate::common::cell_value::{CellData, CellError, CellValue};
 use crate::common::expression::Expression;
 use crate::common::structs::AbsCell;
 use crate::embedded_backend::calc_engine::evaluate;
-use std::collections::{BTreeMap, HashMap, HashSet};
-use serde::{Deserialize, Serialize};
 use crate::embedded_backend::structs::CellInput;
-use std::fs::File;
-use std::io::{self, Write};
 use bincode;
+use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::fs::File;
+use std::io::{self};
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct Storage {
+    rows: u16,
+    cols: u16,
     values: BTreeMap<AbsCell, CellData>,
     graph: HashMap<AbsCell, CellMetadata>,
-    // graph: DiGraphMap<AbsCell, (), RandomState>
 }
 
 
 impl Storage {
     
-    pub fn new() -> Self {
+    pub fn new(rows: u16, cols: u16) -> Self {
         Storage {
+            rows,
+            cols,
             values: BTreeMap::new(),
             graph: HashMap::new(),
         }
@@ -309,6 +312,38 @@ impl Storage {
     pub fn deserialize_from_file(file: File) -> io::Result<Self> {
         let reader = io::BufReader::new(file);
         bincode::deserialize_from(reader).map_err(|e| io::Error::new(io::ErrorKind::Other, e))
+    }
+    
+    pub fn search_from_start(&self, to_search: &str) -> Option<AbsCell> {
+        self.search(AbsCell::new(0,-1), to_search)
+    }
+    pub fn search(&self, start: AbsCell, to_search: &str) -> Option<AbsCell> {
+        let next_cell = {
+            if start.col >= (self.cols - 1) as i16 {
+                AbsCell::new(start.row + 1, 0)
+            } else { AbsCell::new(start.row, start.col+1) }
+        };
+        
+        if next_cell.row >= (self.rows - 1) as i16 { 
+            return None;
+        }
+        
+        for (cell, value) in self.values.range(next_cell..) {
+            match &value.value {
+                Ok(CellValue::String(text)) => {
+                    if text.contains(to_search) {
+                    return Some(*cell);
+                    }
+                }
+                Ok(CellValue::Number(num)) => {
+                    if num.to_string().contains(to_search) {
+                    return Some(*cell);
+                    }
+                }
+            _ => {}
+            }
+        }
+        None
     }
     
 }

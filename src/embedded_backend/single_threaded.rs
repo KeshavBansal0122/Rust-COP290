@@ -21,7 +21,7 @@ impl EmbeddedBackend {
     
     pub fn new(rows: u16, cols: u16) -> Self {
         EmbeddedBackend {
-            storage: Storage::new(),
+            storage: Storage::new(rows, cols),
             parser: FormulaParser::new(rows, cols),
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
@@ -123,6 +123,14 @@ impl EmbeddedBackend {
         } else {
             Err(ExpressionError::CircularReference)
         }
+    }
+    
+    pub fn search(&self, cell: AbsCell, to_search: &str) -> Option<AbsCell> {
+        self.storage.search(cell, to_search)
+    }
+    
+    pub fn search_from_start(&self, to_search: &str) -> Option<AbsCell> {
+        self.storage.search_from_start(to_search)
     }
     
 }
