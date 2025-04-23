@@ -6,6 +6,9 @@ use crate::embedded_backend::calc_engine::evaluate;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 use crate::embedded_backend::structs::CellInput;
+use std::fs::File;
+use std::io::{self, Write};
+use bincode;
 
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct Storage {
@@ -277,6 +280,35 @@ impl Storage {
                 true
             }
         }
+    }
+
+    /// Serializes the Storage struct to a file using binary serialization.
+    /// 
+    /// # Arguments
+    /// 
+    /// * `file_path` - The path to the file where the serialized data will be written.
+    /// 
+    /// # Returns
+    /// 
+    /// * `Result<(), io::Error>` - Ok if successful, Err if an error occurs.
+    pub fn serialize_to_file(&self, file_path: &File) -> io::Result<()> {
+        let writer = io::BufWriter::new(file_path);
+        bincode::serialize_into(writer, self).map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        Ok(())
+    }
+
+    /// Deserializes the Storage struct from a file using binary deserialization.
+    ///
+    /// # Arguments
+    ///
+    /// * `file` - The file from which the data will be read.
+    ///
+    /// # Returns
+    ///
+    /// * `Result<Self, io::Error>` - Ok with the deserialized Storage if successful, Err if an error occurs.
+    pub fn deserialize_from_file(file: File) -> io::Result<Self> {
+        let reader = io::BufReader::new(file);
+        bincode::deserialize_from(reader).map_err(|e| io::Error::new(io::ErrorKind::Other, e))
     }
     
 }
