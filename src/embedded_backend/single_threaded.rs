@@ -1,4 +1,4 @@
-use crate::common::cell_value::{CellError, CellValue};
+use crate::common::cell_value::{CellData, CellError, CellValue};
 use crate::common::structs::AbsCell;
 use crate::embedded_backend::storage::Storage;
 use crate::embedded_backend::structs::{Action, CellInput};
@@ -64,6 +64,10 @@ impl EmbeddedBackend {
     
     pub fn get_cell_value(&self, cell: AbsCell) -> &Result<CellValue, CellError> {
         self.storage.get_value(cell)
+    }
+
+    pub fn get_cell_formula(&self, cell: AbsCell) -> Option<String> {
+        self.storage.get_cell_formula(cell)
     }
     
     pub fn get_cell_range(&self,

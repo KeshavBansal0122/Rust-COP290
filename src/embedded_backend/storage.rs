@@ -18,7 +18,6 @@ pub struct Storage {
     graph: HashMap<AbsCell, CellMetadata>,
 }
 
-
 impl Storage {
     
     pub fn new(rows: u16, cols: u16) -> Self {
@@ -32,6 +31,12 @@ impl Storage {
     pub fn get_value(&self, cell: AbsCell) -> &Result<CellValue, CellError> {
         let x = self.values.get(&cell).map(|cell_data| &cell_data.value);
         x.unwrap_or(&Ok(CellValue::Empty))
+    }
+    
+    pub fn get_cell_formula(&self, cell: AbsCell) -> Option<String> {
+        let x = self.values.get(&cell)?;
+        let x = x.formula.as_ref()?;
+        Some(x.to_string(cell))
     }
     
 
