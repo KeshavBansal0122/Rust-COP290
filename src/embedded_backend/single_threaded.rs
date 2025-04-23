@@ -73,7 +73,7 @@ impl EmbeddedBackend {
     pub fn get_cell_range(&self,
                           top_left: AbsCell,
                           bottom_right: AbsCell
-    ) -> impl Iterator<Item = (AbsCell, &Result<CellValue, CellError>)> {
+    ) -> impl Iterator<Item = (AbsCell, &CellData)> {
         self.storage.get_value_range_full(top_left, bottom_right)
     }
     
@@ -168,7 +168,7 @@ impl EmbeddedBackend {
         top_left: AbsCell,
         bottom_right: AbsCell,
         file_path: &Path,
-    ) -> Result<(), std::io::Error> {
+    ) -> Result<(), io::Error> {
         let mut writer = csv::Writer::from_path(file_path)?;
 
         for row in top_left.row..=bottom_right.row {

@@ -64,7 +64,7 @@ impl Storage {
     /// 
     /// # Arguments 
     /// 
-    /// * `top_left`: topleft of the rectangle
+    /// * `top_left`: top left of the rectangle
     /// * `bottom_right`: bottom right of the rectangle
     /// 
     /// returns: The iterator over the cells in range. 
@@ -79,7 +79,7 @@ impl Storage {
     pub fn get_value_range_full(&self,
                                 top_left: AbsCell,
                                 bottom_right: AbsCell
-    ) -> impl Iterator<Item=(AbsCell, &Result<CellValue, CellError>)> {
+    ) -> impl Iterator<Item=(AbsCell, &CellData)> {
         FullRangeIter::new(top_left, bottom_right, &self.values)
     }
     
@@ -130,9 +130,9 @@ impl Storage {
     }
     
     /// Updates the graph according to the new expression. 
-    /// Does not add the expression if it causes a ciruclar dependancy
+    /// Does not add the expression if it causes a circular dependency
     /// 
-    /// Also updates the values of the cells according to the expression if no circular dependancy was cause
+    /// Also updates the values of the cells according to the expression if no circular dependency was cause
     /// 
     /// # Arguments 
     /// 
@@ -448,7 +448,7 @@ impl<'a> FullRangeIter<'a> {
 }
 
 impl<'a> Iterator for FullRangeIter<'a> {
-    type Item = (AbsCell, &'a Result<CellValue, CellError>);
+    type Item = (AbsCell, &'a CellData);
 
     fn next(&mut self) -> Option<Self::Item> {
         // Check if we've gone beyond the bottom-right boundary
@@ -473,12 +473,12 @@ impl<'a> Iterator for FullRangeIter<'a> {
             Some((cell, data)) if *cell == result_cell => {
                 // Consume this value and fetch the next one for future iterations
                 self.next_value = self.value_iter.next();
-                Some((result_cell, &data.value))
+                Some((result_cell, data))
             },
             _ => {
                 // Either no next value or it doesn't match our current cell
                 // Return an empty cell
-                Some((result_cell, &Ok(CellValue::Empty)))
+                Some((result_cell, CellData::default_instance()))
             }
         }
     }

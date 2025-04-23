@@ -29,3 +29,13 @@ impl Default for CellData {
         }
     }
 }
+
+impl CellData {
+    pub fn default_instance() -> &'static CellData {
+        static DEFAULT_CELL: CellData = CellData {
+            value: Ok(CellValue::Empty),
+            formula: None,
+        };
+        &DEFAULT_CELL
+    }
+}
