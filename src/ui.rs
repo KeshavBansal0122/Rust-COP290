@@ -4,7 +4,6 @@ use crate::common::cell_value::CellValue;
 use egui::{Color32, FontId, Key, RichText, TextEdit};
 use std::path::PathBuf;
 use rfd::FileDialog;
-use rfd::MessageDialogResult::No;
 
 pub struct SpreadsheetApp {
     backend: EmbeddedBackend,
@@ -237,25 +236,6 @@ impl SpreadsheetApp {
         // This ensures that any formulas dependent on the edited cell are updated
         // self.refresh_viewport_cells();
     }
-
-    // New method to refresh all cells in the viewport
-    fn refresh_viewport_cells(&mut self) {
-        // Simply iterating through all visible cells and triggering a get_cell_value
-        // will cause the backend to recalculate any dependent formulas
-        for row in 0..self.display_rows {
-            for col in 0..self.display_cols {
-                let cell = AbsCell::new(
-                    self.view_top_left.row + row,
-                    self.view_top_left.col + col
-                );
-                // Force a recalculation by getting the cell value
-                println!("{:?}", self.backend.get_cell_value(cell));
-            }
-        }
-
-        // The actual display updates will happen on the next UI refresh
-    }
-
     fn move_view(&mut self, row_delta: i16, col_delta: i16) {
         let new_row = self.view_top_left.row as i16 + row_delta;
         let new_col = self.view_top_left.col as i16 + col_delta;
@@ -729,7 +709,7 @@ impl eframe::App for SpreadsheetApp {
                         "View: {}{} to {}{}",
                         Self::cell_to_label(self.view_top_left.col),
                         self.view_top_left.row + 1,
-                        Self::cell_to_label((self.view_top_left.col + self.display_cols - 1)),
+                        Self::cell_to_label(self.view_top_left.col + self.display_cols - 1),
                         self.view_top_left.row + self.display_rows
                     ));
                 });
