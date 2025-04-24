@@ -371,8 +371,9 @@ impl<'a> SparseRangeIter<'a> {
     fn new(top_left: AbsCell, bottom_right: AbsCell, values: &'a BTreeMap<AbsCell, CellData>) -> Self {
         let is_valid = top_left.row <= bottom_right.row && top_left.col <= bottom_right.col;
 
+        let top_right = AbsCell::new(top_left.row, bottom_right.col);
         let value_iter = if is_valid {
-            values.range(top_left..=bottom_right)
+            values.range(top_left..=top_right)
         } else {
             values.range(bottom_right..bottom_right) //empty range
         };
@@ -400,6 +401,7 @@ impl<'a> Iterator for SparseRangeIter<'a> {
         loop {
             let val = self.value_iter.next();
             if let Some((cell, value)) = val {
+                
                 return Some((*cell, &value.value));
 
             } else if self.current_row.row != self.bottom_right.row {

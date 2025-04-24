@@ -41,20 +41,6 @@ impl AbsCell {
             col: self.col - origin.col,
         }
     }
-    
-    pub fn to_0_based(&self) -> Self {
-        AbsCell {
-            row: self.row - 1,
-            col: self.col - 1,
-        }
-    }
-    
-    pub fn to_1_based(&self) -> Self {
-        AbsCell {
-            row: self.row + 1,
-            col: self.col + 1,
-        }
-    }
 }
 
 impl Display for AbsCell {
