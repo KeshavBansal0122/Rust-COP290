@@ -20,6 +20,11 @@ pub struct Storage {
 
 static EMPTY_HASHSET: once_cell::sync::Lazy<HashSet<AbsCell>> = once_cell::sync::Lazy::new(HashSet::new);
 
+pub enum StorageError {
+    CircularDependency,
+    InvalidCell,
+    None
+}
 
 impl Storage {
     
@@ -145,7 +150,7 @@ impl Storage {
     /// * `expression`: 
     /// 
     /// returns: bool
-    pub fn set_expression(&mut self, cell: AbsCell, expression: Expression) -> bool {
+    pub fn set_expression(&mut self, cell: AbsCell, expression: Expression) -> StorageError {
         let cell_data = self.values.get(&cell);
         
         //remove old edges
@@ -167,6 +172,12 @@ impl Storage {
         //add new
         let mut referenced_cells = HashSet::new();
         Self::collect_referenced_cells(&expression, cell, &mut referenced_cells);
+        
+        if referenced_cells.iter().any(|x| {
+            x.row < 0 || x.col < 0 || x.row >= self.rows as i16 || x.col >= self.cols as i16
+        }) {
+            return StorageError::InvalidCell;
+        }
 
         for referenced_cell in referenced_cells {
             self.graph
@@ -203,13 +214,13 @@ impl Storage {
                     }
                 }
             }
-            return false
+            return StorageError::CircularDependency;
         }
         
         let cell_data = self.values.entry(cell).or_default();
         cell_data.formula = Some(expression);
         self.update_cells(cell);
-        true
+        return StorageError::None
     }
     
     fn collect_referenced_cells(expression: &Expression, cell: AbsCell, referenced_cells: &mut HashSet<AbsCell>) {
@@ -276,7 +287,7 @@ impl Storage {
         }
     }
     
-    pub fn copy_cell_expression(&mut self, from: AbsCell, to: AbsCell) -> bool {
+    pub fn copy_cell_expression(&mut self, from: AbsCell, to: AbsCell) -> StorageError {
         let cell_data = self.values.get(&from);
         match cell_data { 
             Some(data) => {
@@ -285,12 +296,12 @@ impl Storage {
                 } else {
                     let val = data.value.as_ref().unwrap().clone();
                     self.set_value(to, val);
-                    true
+                    StorageError::None
                 }
             }
             None => {
                 self.set_value(to, CellValue::Empty);
-                true
+                StorageError::None
             }
         }
     }

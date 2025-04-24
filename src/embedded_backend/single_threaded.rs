@@ -1,6 +1,6 @@
 use crate::common::cell_value::{CellData, CellError, CellValue};
 use crate::common::structs::AbsCell;
-use crate::embedded_backend::storage::Storage;
+use crate::embedded_backend::storage::{Storage, StorageError};
 use crate::embedded_backend::structs::{Action, CellInput};
 use crate::parser::formula_parser::FormulaParser;
 use std::fs::File;
@@ -81,9 +81,8 @@ impl EmbeddedBackend {
         let new = self.parser.parse(formula, cell).map_err(|_| ExpressionError::InvalidExpression)?;
         let old = self.storage.get_input(cell);
         
-        if !self.storage.set_expression(cell, new) {
-            Err(ExpressionError::CircularReference)
-        } else { 
+        let res = self.storage.set_expression(cell, new);
+        if let StorageError::None = res {
             let action = Action {
                 cell,
                 old_value: old,
@@ -94,7 +93,26 @@ impl EmbeddedBackend {
                 self.redo_stack.clear();
             }
             Ok(())
+        } else if let StorageError::CircularDependency = res {
+            Err(ExpressionError::CircularReference)
+        } else {
+            Err(ExpressionError::InvalidExpression)
         }
+        // }
+        // if !self.storage.set_expression(cell, new) {
+        //     Err(ExpressionError::CircularReference)
+        // } else { 
+        //     let action = Action {
+        //         cell,
+        //         old_value: old,
+        //         new_value: self.storage.get_input(cell),
+        //     };
+        //     self.undo_stack.push(action);
+        //     if !self.redo_stack.is_empty() {
+        //         self.redo_stack.clear();
+        //     }
+        //     Ok(())
+        // }
     }
     
     /// Returns true if the undo stack was not empty and undo actually happened
@@ -138,10 +156,10 @@ impl EmbeddedBackend {
     }
     
     pub fn copy_cell_expression(&mut self, from: AbsCell, to: AbsCell) -> Result<(), ExpressionError> {
-        if self.storage.copy_cell_expression(from, to) {
-            Ok(())
-        } else {
-            Err(ExpressionError::CircularReference)
+        match self.storage.copy_cell_expression(from, to) {
+            StorageError::CircularDependency => Err(ExpressionError::CircularReference),
+            StorageError::InvalidCell => Err(ExpressionError::InvalidExpression),
+            StorageError::None => Ok(())
         }
     }
     

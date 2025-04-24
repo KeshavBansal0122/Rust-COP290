@@ -11,8 +11,8 @@ pub struct SpreadsheetApp {
     view_top_left: AbsCell,
     selected_cell: AbsCell,
     editing: bool,
-    inline_editing: bool,        // New flag for inline editing
-    inline_edit_value: String,   // New field for inline editing
+    inline_editing: bool,
+    inline_edit_value: String,
     formula_input: String,
     status_message: String,
     display_rows: i16,
@@ -23,6 +23,9 @@ pub struct SpreadsheetApp {
     show_load_dialog: bool,
     save_path: Option<PathBuf>,
     copied_cell: Option<AbsCell>,
+    search_value: String,
+    show_search_panel: bool,
+    last_search_position: Option<AbsCell>,
 }
 
 impl SpreadsheetApp {
@@ -35,8 +38,8 @@ impl SpreadsheetApp {
             view_top_left: AbsCell::new(0, 0),
             selected_cell: AbsCell::new(0, 0),
             editing: false,
-            inline_editing: false,         // Initialize inline editing flag
-            inline_edit_value: String::new(), // Initialize inline edit value
+            inline_editing: false,
+            inline_edit_value: String::new(),
             formula_input: String::new(),
             status_message: String::from("Ready"),
             display_rows: 10,
@@ -46,6 +49,106 @@ impl SpreadsheetApp {
             show_save_dialog: false,
             show_load_dialog: false,
             save_path: None,
+            // Initialize new search fields
+            search_value: String::new(),
+            show_search_panel: false,
+            last_search_position: None,
+        }
+    }
+
+    // Add new methods for search functionality
+    fn toggle_search_panel(&mut self) {
+        self.show_search_panel = !self.show_search_panel;
+        if self.show_search_panel {
+            self.search_value = String::new();
+            self.last_search_position = None;
+        }
+    }
+
+    fn search_next(&mut self) {
+        if self.search_value.is_empty() {
+            self.status_message = "Search value cannot be empty".to_string();
+            return;
+        }
+
+        let start_cell = if let Some(last_pos) = self.last_search_position {
+            last_pos
+        } else {
+            self.selected_cell
+        };
+
+        match self.backend.search(start_cell, &self.search_value) {
+            Some(found_cell) => {
+                self.selected_cell = found_cell;
+                self.last_search_position = Some(found_cell);
+                self.status_message = format!("Found match at {}{}",
+                                              Self::cell_to_label(found_cell.col),
+                                              found_cell.row + 1
+                );
+
+                // Ensure the found cell is visible in the viewport
+                self.ensure_cell_visible(found_cell);
+
+                // Update formula input for the selected cell
+                if let Some(formula) = self.backend.get_cell_formula(self.selected_cell) {
+                    self.formula_input = format!("={}", formula);
+                } else {
+                    self.formula_input = self.render_cell_value(self.selected_cell);
+                }
+            },
+            None => {
+                self.status_message = format!("No more matches found for '{}'", self.search_value);
+                // Reset search position to start from beginning next time
+                self.last_search_position = None;
+            }
+        }
+    }
+
+    fn search_from_beginning(&mut self) {
+        if self.search_value.is_empty() {
+            self.status_message = "Search value cannot be empty".to_string();
+            return;
+        }
+
+        match self.backend.search_from_start(&self.search_value) {
+            Some(found_cell) => {
+                self.selected_cell = found_cell;
+                self.last_search_position = Some(found_cell);
+                self.status_message = format!("Found match at {}{}",
+                                              Self::cell_to_label(found_cell.col),
+                                              found_cell.row + 1
+                );
+
+                // Ensure the found cell is visible in the viewport
+                self.ensure_cell_visible(found_cell);
+
+                // Update formula input for the selected cell
+                if let Some(formula) = self.backend.get_cell_formula(self.selected_cell) {
+                    self.formula_input = format!("={}", formula);
+                } else {
+                    self.formula_input = self.render_cell_value(self.selected_cell);
+                }
+            },
+            None => {
+                self.status_message = format!("No matches found for '{}'", self.search_value);
+                self.last_search_position = None;
+            }
+        }
+    }
+
+    // Helper method to ensure a cell is visible in the viewport
+    fn ensure_cell_visible(&mut self, cell: AbsCell) {
+        // Check if cell is outside visible area and adjust view if needed
+        if cell.row < self.view_top_left.row {
+            self.view_top_left.row = cell.row;
+        } else if cell.row >= self.view_top_left.row + self.display_rows {
+            self.view_top_left.row = cell.row - self.display_rows + 1;
+        }
+
+        if cell.col < self.view_top_left.col {
+            self.view_top_left.col = cell.col;
+        } else if cell.col >= self.view_top_left.col + self.display_cols {
+            self.view_top_left.col = cell.col - self.display_cols + 1;
         }
     }
 
@@ -289,6 +392,35 @@ impl eframe::App for SpreadsheetApp {
         }
 
         // Handle keyboard inputs
+        if self.show_search_panel {
+            // When search panel is active, handle search-specific keys
+            if ctx.input(|i| i.key_pressed(Key::Escape)) {
+                self.show_search_panel = false;
+            }
+
+            // F3 to search for next occurrence
+            if ctx.input(|i| i.key_pressed(Key::F3)) {
+                self.search_next();
+            }
+
+            // Shift+F3 to search from beginning
+            if ctx.input(|i| i.modifiers.shift && i.key_pressed(Key::F3)) {
+                self.search_from_beginning();
+            }
+        } else if !self.inline_editing {
+            // When search panel is NOT active and not editing a cell
+            // Ctrl+F to open search panel
+            if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(Key::F)) {
+                self.toggle_search_panel();
+            }
+
+            // F3 to quickly open search and search next
+            if ctx.input(|i| i.key_pressed(Key::F3)) {
+                self.show_search_panel = true;
+            }
+        }
+        
+        
         if self.inline_editing {
             // Check for Escape key specifically to handle it more reliably
             if ctx.input(|i| i.key_pressed(Key::Escape)) {
@@ -439,6 +571,21 @@ impl eframe::App for SpreadsheetApp {
                     }
                 });
 
+                ui.menu_button("Search", |ui| {
+                    if ui.button("Find...").clicked() {
+                        self.toggle_search_panel();
+                        ui.close_menu();
+                    }
+                    if ui.button("Find Next").clicked() {
+                        self.search_next();
+                        ui.close_menu();
+                    }
+                    if ui.button("Find From Beginning").clicked() {
+                        self.search_from_beginning();
+                        ui.close_menu();
+                    }
+                });
+
                 ui.menu_button("Edit", |ui| {
                     if ui.button("Copy").clicked() {
                         self.copy_cell();
@@ -487,6 +634,61 @@ impl eframe::App for SpreadsheetApp {
             });
         });
 
+        if self.show_search_panel {
+            egui::TopBottomPanel::top("search_panel").show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label("Search:");
+
+                    // Search input field with input capture
+                    let mut search_text = self.search_value.clone();
+                    let text_edit = TextEdit::singleline(&mut search_text)
+                        .desired_width(ui.available_width() * 0.5)
+                        .font(FontId::proportional(14.0))
+                        .hint_text("Type to search...");
+
+                    let response = ui.add(text_edit);
+
+                    // Set focus to the search field when panel first opens
+                    if self.search_value.is_empty() {
+                        ui.memory_mut(|mem| mem.request_focus(response.id));
+                    }
+
+                    // Update search value and handle Enter key
+                    if response.changed() {
+                        self.search_value = search_text;
+                    }
+
+                    if (response.lost_focus() && ctx.input(|i| i.key_pressed(Key::Enter))) ||
+                        (response.has_focus() && ctx.input(|i| i.key_pressed(Key::Enter))) {
+                        self.search_next();
+                        // Return focus to search field after searching
+                        ui.memory_mut(|mem| mem.request_focus(response.id));
+                    }
+
+                    // Search buttons
+                    if ui.button("Search Next").clicked() {
+                        self.search_next();
+                        // Return focus to search field
+                        ui.memory_mut(|mem| mem.request_focus(response.id));
+                    }
+
+                    if ui.button("From Beginning").clicked() {
+                        self.search_from_beginning();
+                        // Return focus to search field
+                        ui.memory_mut(|mem| mem.request_focus(response.id));
+                    }
+
+                    if ui.button("Close").clicked() {
+                        self.show_search_panel = false;
+                    }
+                });
+            });
+
+            // The search panel is modal by nature
+            // We don't need explicit event consumption since we're checking
+            // for self.show_search_panel before starting cell editing elsewhere
+        }
+        
         // Formula bar
         egui::TopBottomPanel::top("formula_bar").show(ctx, |ui| {
             ui.horizontal(|ui| {
@@ -650,7 +852,7 @@ impl eframe::App for SpreadsheetApp {
                                             ui.painter().rect_filled(
                                                 ui.available_rect_before_wrap(),
                                                 0.0,
-                                                Color32::from_rgb(0, 0, 0) // Light blue background
+                                                Color32::from_rgb(0, 0, 0)
                                             );
 
                                             // Border for selected cell
