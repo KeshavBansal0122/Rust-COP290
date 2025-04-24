@@ -419,8 +419,8 @@ impl eframe::App for SpreadsheetApp {
                 self.show_search_panel = true;
             }
         }
-        
-        
+
+
         if self.inline_editing {
             // Check for Escape key specifically to handle it more reliably
             if ctx.input(|i| i.key_pressed(Key::Escape)) {
@@ -457,6 +457,15 @@ impl eframe::App for SpreadsheetApp {
             if ctx.input(|i| i.key_pressed(Key::PageDown)) {
                 self.move_selection(self.display_rows, 0);
             }
+            //copy
+            if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(Key::C)) {
+                self.copy_cell();
+            }
+
+            // Ctrl+V for paste
+            if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(Key::V)) {
+                self.paste_cell();
+            }
 
             // Ctrl+Z for undo
             if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(Key::Z)) {
@@ -488,15 +497,7 @@ impl eframe::App for SpreadsheetApp {
                 }
             }
 
-            //copy
-            if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(Key::C)) {
-                self.copy_cell();
-            }
 
-            // Ctrl+V for paste
-            if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(Key::V)) {
-                self.paste_cell();
-            }
 
             // Ctrl+S for save
             if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(Key::S)) {
@@ -844,33 +845,43 @@ impl eframe::App for SpreadsheetApp {
                                     } else {
                                         let cell_value = self.render_cell_value(cell);
 
-                                        // Improved cell highlighting with border and background
-                                        let mut text = RichText::new(&cell_value);
+                                        // Get the text ready
+                                        let text = RichText::new(&cell_value);
+                                        let text = if is_selected { text.strong() } else { text };
 
+                                        // Create the cell area - important: use the full rect here
+                                        let rect = ui.available_rect_before_wrap();
+
+                                        // Draw cell background if selected
                                         if is_selected {
-                                            // Draw with enhanced highlight style for selected cell
                                             ui.painter().rect_filled(
-                                                ui.available_rect_before_wrap(),
+                                                rect,
                                                 0.0,
-                                                Color32::from_rgb(0, 0, 0)
+                                                Color32::from_rgb(0, 0, 0) // Light blue background
                                             );
 
                                             // Border for selected cell
                                             ui.painter().rect_stroke(
-                                                ui.available_rect_before_wrap(),
+                                                rect,
                                                 0.0,
-                                                egui::Stroke::new(2.0, Color32::from_rgb(0, 90, 180)), // Darker blue border,
+                                                egui::Stroke::new(2.0, Color32::from_rgb(0, 90, 180)), // Darker blue border
                                                 egui::StrokeKind::Middle
                                             );
-
-                                            // Make text slightly darker for contrast
-                                            text = text.strong();
                                         }
 
-                                        // Use both click and double-click sensing
-                                        let response = ui.add(egui::Label::new(text).sense(egui::Sense::click()));
+                                        // Add the label with its text
+                                        ui.add(egui::Label::new(text));
 
-                                        // Single click selects the cell
+                                        // Add an invisible button over the entire cell area to capture clicks
+                                        // Position it at the same place as the cell
+                                        let response = ui.put(
+                                            rect,
+                                            egui::Button::new("") // Empty text
+                                                .frame(false)  // No visible frame
+                                                .fill(Color32::TRANSPARENT) // Transparent fill
+                                        );
+
+                                        // Handle clicks on the invisible button covering the entire cell
                                         if response.clicked() {
                                             // If we were editing another cell, commit those changes
                                             if self.inline_editing {
