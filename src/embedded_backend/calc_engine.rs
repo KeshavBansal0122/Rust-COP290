@@ -9,19 +9,18 @@ mod functions;
 
 /// Evaluates the expression for a given cell.
 pub fn evaluate(storage: &Storage, cell: AbsCell, expr: &Expression) -> Result<f64, CellError> {
-    
     match expr {
         Expression::Number(x) => Ok(*x),
-        
-        Expression::Cell(c) => { 
+
+        Expression::Cell(c) => {
             let x = storage.get_value(c.to_abs(cell));
             match x {
                 Ok(val) => match val {
                     CellValue::Number(n) => Ok(*n),
                     CellValue::Empty => Ok(0.0),
                     CellValue::String(_) => Err(CellError::DependsOnNonNumeric),
-                }
-                Err(e) => Err(*e)
+                },
+                Err(e) => Err(*e),
             }
         }
         Expression::BinaryOp(exp1, op, exp2) => match op {
@@ -49,17 +48,15 @@ pub fn evaluate(storage: &Storage, cell: AbsCell, expr: &Expression) -> Result<f
                     Ok(x / y)
                 }
             }
-        }
-        
-        Expression::RangeFunction(f, range) => {
-            match f {
-                RangeFunction::Min => functions::min(storage, cell, range),
-                RangeFunction::Max => functions::max(storage, cell, range),
-                RangeFunction::Avg => functions::average(storage, cell, range),
-                RangeFunction::Sum => functions::sum(storage, cell, range),
-                RangeFunction::Stdev => functions::stdev(storage, cell, range),
-            }
-        }
+        },
+
+        Expression::RangeFunction(f, range) => match f {
+            RangeFunction::Min => functions::min(storage, cell, range),
+            RangeFunction::Max => functions::max(storage, cell, range),
+            RangeFunction::Avg => functions::average(storage, cell, range),
+            RangeFunction::Sum => functions::sum(storage, cell, range),
+            RangeFunction::Stdev => functions::stdev(storage, cell, range),
+        },
         Expression::Sleep(exp) => {
             let x = evaluate(storage, cell, exp)?;
             if x > 0.0 {

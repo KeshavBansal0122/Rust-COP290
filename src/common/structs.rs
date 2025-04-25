@@ -1,40 +1,43 @@
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fmt::Display;
 use std::str::FromStr;
-use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Eq, Default, Hash, PartialOrd, Ord, Copy, Serialize, Deserialize)] 
+#[derive(
+    Debug, Clone, PartialEq, Eq, Default, Hash, PartialOrd, Ord, Copy, Serialize, Deserialize,
+)]
 pub struct AbsCell {
     pub row: i16,
     pub col: i16,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default, Hash, PartialOrd, Ord, Copy, Serialize, Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, Default, Hash, PartialOrd, Ord, Copy, Serialize, Deserialize,
+)]
 pub struct RelCell {
     pub row: i16,
     pub col: i16,
 }
 
 impl AbsCell {
-     pub const fn new(row: i16, col: i16) -> Self {
-        
+    pub const fn new(row: i16, col: i16) -> Self {
         AbsCell { row, col }
     }
-    
+
     pub fn from_rel(target: RelCell, origin: AbsCell) -> Self {
         AbsCell {
             row: origin.row + target.row,
             col: origin.col + target.col,
         }
     }
-    
+
     pub fn from_rel_origin(target: RelCell) -> Self {
         AbsCell {
             row: target.row,
             col: target.col,
         }
     }
-    
+
     pub fn to_rel(&self, origin: AbsCell) -> RelCell {
         RelCell {
             row: self.row - origin.row,
@@ -67,7 +70,7 @@ impl FromStr for AbsCell {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut col = 0i16;
         let mut row_part = String::new();
-        
+
         for (i, c) in s.chars().enumerate() {
             if c.is_ascii_alphabetic() {
                 let upper_c = c.to_ascii_uppercase();
@@ -100,7 +103,7 @@ impl RelCell {
     pub fn new(x: i16, y: i16) -> Self {
         RelCell { row: x, col: y }
     }
-    
+
     pub fn to_abs(&self, origin: AbsCell) -> AbsCell {
         AbsCell {
             row: origin.row + self.row,

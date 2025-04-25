@@ -1,6 +1,6 @@
-use std::fmt::{self, Display};
-use serde::{Deserialize, Serialize};
 use crate::common::structs::{AbsCell, RelCell};
+use serde::{Deserialize, Serialize};
+use std::fmt::{self, Display};
 
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Serialize, Deserialize)]
 pub enum Operator {
@@ -33,7 +33,6 @@ pub enum Expression {
     RangeFunction(RangeFunction, CellRange),
     Sleep(Box<Expression>),
 }
-
 
 impl Display for Operator {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

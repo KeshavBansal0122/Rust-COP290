@@ -1,5 +1,5 @@
-use pest::iterators::Pair;
 use pest::Parser;
+use pest::iterators::Pair;
 use pest_derive::Parser;
 use std::str::FromStr;
 
@@ -23,8 +23,7 @@ impl FormulaParser {
 
     #[allow(clippy::result_unit_err)]
     pub fn parse(&self, formula: &str, cell: AbsCell) -> Result<Expression, ()> {
-        let pairs = PestFormulaParser::parse(Rule::formula, formula)
-            .map_err(|_| ())?;
+        let pairs = PestFormulaParser::parse(Rule::formula, formula).map_err(|_| ())?;
 
         let formula_pair = pairs.peek().unwrap();
         let expr_pairs = formula_pair.into_inner().next().unwrap();
@@ -52,7 +51,7 @@ impl FormulaParser {
                 }
 
                 Ok(left)
-            },
+            }
             Rule::factor => {
                 let mut pairs = pair.into_inner();
                 let mut left = self.parse_expression(pairs.next().unwrap(), cell)?;
@@ -69,24 +68,23 @@ impl FormulaParser {
                 }
 
                 Ok(left)
-            },
+            }
             Rule::term => {
                 let inner = pair.into_inner().next().unwrap();
                 self.parse_expression(inner, cell)
-            },
+            }
             Rule::number => {
-                let value = pair.as_str().parse::<f64>()
-                    .map_err(|_| ())?;
+                let value = pair.as_str().parse::<f64>().map_err(|_| ())?;
                 Ok(Expression::Number(value))
-            },
+            }
             Rule::cell_ref => {
                 let cell_ref = self.parse_cell_ref(pair.as_str(), cell)?;
                 Ok(Expression::Cell(cell_ref))
-            },
+            }
             Rule::function => {
                 let function_pair = pair.into_inner().next().unwrap();
                 self.parse_expression(function_pair, cell)
-            },
+            }
             Rule::range_function => {
                 let mut pairs = pair.into_inner();
                 let function_name = pairs.next().unwrap();
@@ -103,12 +101,12 @@ impl FormulaParser {
 
                 let cell_range = self.parse_cell_range(range_pair, cell)?;
                 Ok(Expression::RangeFunction(range_function, cell_range))
-            },
+            }
             Rule::sleep_function => {
                 let expr_pair = pair.into_inner().next().unwrap();
                 let expr = self.parse_expression(expr_pair, cell)?;
                 Ok(Expression::Sleep(Box::new(expr)))
-            },
+            }
             _ => Err(()),
         }
     }
@@ -121,7 +119,7 @@ impl FormulaParser {
             Ok(c.to_rel(cell))
         }
     }
-    
+
     fn parse_cell_range(&self, range_pair: Pair<Rule>, cell: AbsCell) -> Result<CellRange, ()> {
         let mut pairs = range_pair.into_inner();
         let top_left_str = pairs.next().unwrap().as_str();
@@ -134,11 +132,12 @@ impl FormulaParser {
         if !(top_left.row <= bottom_right.row && top_left.col <= bottom_right.col) {
             return Err(());
         }
-        Ok(CellRange { top_left, bottom_right })
+        Ok(CellRange {
+            top_left,
+            bottom_right,
+        })
     }
 }
-
-
 
 #[cfg(test)]
 mod tests {
@@ -183,9 +182,9 @@ mod tests {
     #[test]
     fn test_invalid_range() {
         let parser = FormulaParser::new(1000, 26);
-        let formula = "SUM(Z9:A1)";  // Bottom-right should be below and to the right of top-left
+        let formula = "SUM(Z9:A1)"; // Bottom-right should be below and to the right of top-left
         let cell = AbsCell::new(1, 1);
-        
+
         let result = parser.parse(formula, cell);
         assert!(result.is_err(), "Should fail with invalid range");
     }
@@ -196,7 +195,7 @@ mod tests {
         // Column AA is beyond our 26-column limit (A-Z)
         let formula = "AA1 + B2";
         let cell = AbsCell::new(1, 1);
-        
+
         let result = parser.parse(formula, cell);
         assert!(result.is_err(), "Should fail with out of bounds error");
     }
@@ -207,7 +206,7 @@ mod tests {
         // Row 1001 is beyond our 1000-row limit
         let formula = "A1001 + B2";
         let cell = AbsCell::new(1, 1);
-        
+
         let result = parser.parse(formula, cell);
         assert!(result.is_err(), "Should fail with out of bounds error");
     }

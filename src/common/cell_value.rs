@@ -1,11 +1,11 @@
-use serde::{Deserialize, Serialize};
 use crate::common::expression::Expression;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum CellError {
     DivideByZero,
     DependsOnNonNumeric,
-    DependsOnErr
+    DependsOnErr,
 }
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub enum CellValue {

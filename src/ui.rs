@@ -1,9 +1,9 @@
-use crate::embedded_backend::single_threaded::EmbeddedBackend;
-use crate::common::structs::AbsCell;
 use crate::common::cell_value::CellValue;
+use crate::common::structs::AbsCell;
+use crate::embedded_backend::single_threaded::EmbeddedBackend;
 use egui::{Color32, FontId, Key, RichText, TextEdit};
-use std::path::PathBuf;
 use rfd::FileDialog;
+use std::path::PathBuf;
 
 pub struct SpreadsheetApp {
     backend: EmbeddedBackend,
@@ -86,9 +86,10 @@ impl SpreadsheetApp {
             Some(found_cell) => {
                 self.selected_cell = found_cell;
                 self.last_search_position = Some(found_cell);
-                self.status_message = format!("Found match at {}{}",
-                                              Self::cell_to_label(found_cell.col),
-                                              found_cell.row + 1
+                self.status_message = format!(
+                    "Found match at {}{}",
+                    Self::cell_to_label(found_cell.col),
+                    found_cell.row + 1
                 );
 
                 // Ensure the found cell is visible in the viewport
@@ -100,7 +101,7 @@ impl SpreadsheetApp {
                 } else {
                     self.formula_input = self.render_cell_value(self.selected_cell);
                 }
-            },
+            }
             None => {
                 self.status_message = format!("No more matches found for '{}'", self.search_value);
                 // Reset search position to start from beginning next time
@@ -119,9 +120,10 @@ impl SpreadsheetApp {
             Some(found_cell) => {
                 self.selected_cell = found_cell;
                 self.last_search_position = Some(found_cell);
-                self.status_message = format!("Found match at {}{}",
-                                              Self::cell_to_label(found_cell.col),
-                                              found_cell.row + 1
+                self.status_message = format!(
+                    "Found match at {}{}",
+                    Self::cell_to_label(found_cell.col),
+                    found_cell.row + 1
                 );
 
                 // Ensure the found cell is visible in the viewport
@@ -133,7 +135,7 @@ impl SpreadsheetApp {
                 } else {
                     self.formula_input = self.render_cell_value(self.selected_cell);
                 }
-            },
+            }
             None => {
                 self.status_message = format!("No matches found for '{}'", self.search_value);
                 self.last_search_position = None;
@@ -159,9 +161,10 @@ impl SpreadsheetApp {
 
     fn copy_cell(&mut self) {
         self.copied_cell = Some(self.selected_cell);
-        self.status_message = format!("Copied cell {}{}",
-                                      Self::cell_to_label(self.selected_cell.col),
-                                      self.selected_cell.row + 1
+        self.status_message = format!(
+            "Copied cell {}{}",
+            Self::cell_to_label(self.selected_cell.col),
+            self.selected_cell.row + 1
         );
     }
 
@@ -172,11 +175,17 @@ impl SpreadsheetApp {
                 return;
             }
 
-            match self.backend.copy_cell_expression(source_cell, self.selected_cell) {
+            match self
+                .backend
+                .copy_cell_expression(source_cell, self.selected_cell)
+            {
                 Ok(_) => {
-                    self.status_message = format!("Pasted from {}{} to {}{}",
-                                                  Self::cell_to_label(source_cell.col), source_cell.row + 1,
-                                                  Self::cell_to_label(self.selected_cell.col), self.selected_cell.row + 1
+                    self.status_message = format!(
+                        "Pasted from {}{} to {}{}",
+                        Self::cell_to_label(source_cell.col),
+                        source_cell.row + 1,
+                        Self::cell_to_label(self.selected_cell.col),
+                        self.selected_cell.row + 1
                     );
 
                     // Update formula input for the selected cell
@@ -185,7 +194,7 @@ impl SpreadsheetApp {
                     } else {
                         self.formula_input = self.render_cell_value(self.selected_cell);
                     }
-                },
+                }
                 Err(err) => {
                     self.status_message = format!("Paste error: {:?}", err);
                 }
@@ -219,8 +228,12 @@ impl SpreadsheetApp {
     }
 
     fn handle_cell_edit(&mut self, new_value: &str) {
-        #[allow(clippy::manual_strip)] if new_value.starts_with('=') {
-            match self.backend.set_cell_formula(self.selected_cell, &new_value[1..]) {
+        #[allow(clippy::manual_strip)]
+        if new_value.starts_with('=') {
+            match self
+                .backend
+                .set_cell_formula(self.selected_cell, &new_value[1..])
+            {
                 Ok(_) => self.status_message = "Formula updated".to_string(),
                 Err(err) => self.status_message = format!("Formula error: {:?}", err),
             }
@@ -228,15 +241,17 @@ impl SpreadsheetApp {
             self.backend.set_cell_empty(self.selected_cell);
             self.status_message = "Cell cleared".to_string();
         } else if let Ok(num) = new_value.parse::<f64>() {
-            self.backend.set_cell_value(self.selected_cell, CellValue::Number(num));
+            self.backend
+                .set_cell_value(self.selected_cell, CellValue::Number(num));
             self.status_message = "Number set".to_string();
         } else {
-            self.backend.set_cell_value(self.selected_cell, CellValue::String(new_value.to_string()));
+            self.backend
+                .set_cell_value(self.selected_cell, CellValue::String(new_value.to_string()));
             self.status_message = "Text set".to_string();
         }
         self.formula_input = String::new();
         self.editing = false;
-        self.inline_editing = false;  // Reset inline editing flag when done
+        self.inline_editing = false; // Reset inline editing flag when done
 
         // Force a refresh of all visible cells by triggering a recalculation
         // This ensures that any formulas dependent on the edited cell are updated
@@ -311,13 +326,17 @@ impl SpreadsheetApp {
     fn export_to_csv(&mut self) {
         if let Some(path) = FileDialog::new()
             .add_filter("CSV files", &["csv"])
-            .save_file() {
+            .save_file()
+        {
             let bottom_right = AbsCell::new(
                 self.view_top_left.row + self.display_rows - 1,
-                self.view_top_left.col + self.display_cols - 1
+                self.view_top_left.col + self.display_cols - 1,
             );
 
-            match self.backend.save_range_to_csv(self.view_top_left, bottom_right, &path) {
+            match self
+                .backend
+                .save_range_to_csv(self.view_top_left, bottom_right, &path)
+            {
                 Ok(_) => self.status_message = format!("Exported to CSV: {:?}", path),
                 Err(e) => self.status_message = format!("CSV export error: {}", e),
             }
@@ -345,7 +364,8 @@ impl eframe::App for SpreadsheetApp {
         if self.show_save_dialog {
             if let Some(path) = FileDialog::new()
                 .add_filter("Spreadsheet files", &["xlsx", "sheet"])
-                .save_file() {
+                .save_file()
+            {
                 self.save_path = Some(path);
                 self.save_spreadsheet();
             }
@@ -355,20 +375,19 @@ impl eframe::App for SpreadsheetApp {
         if self.show_load_dialog {
             if let Some(path) = FileDialog::new()
                 .add_filter("Spreadsheet files", &["xlsx", "sheet"])
-                .pick_file() {
+                .pick_file()
+            {
                 match std::fs::File::open(&path) {
-                    Ok(file) => {
-                        match EmbeddedBackend::from_file(&file) {
-                            Ok(new_backend) => {
-                                self.backend = new_backend;
-                                self.status_message = format!("Loaded from {:?}", path);
-                                self.save_path = Some(path);
-                            }
-                            Err(e) => {
-                                self.status_message = format!("Error loading file: {}", e);
-                            }
+                    Ok(file) => match EmbeddedBackend::from_file(&file) {
+                        Ok(new_backend) => {
+                            self.backend = new_backend;
+                            self.status_message = format!("Loaded from {:?}", path);
+                            self.save_path = Some(path);
                         }
-                    }
+                        Err(e) => {
+                            self.status_message = format!("Error loading file: {}", e);
+                        }
+                    },
                     Err(e) => {
                         self.status_message = format!("Error opening file: {}", e);
                     }
@@ -406,7 +425,6 @@ impl eframe::App for SpreadsheetApp {
             }
         }
 
-
         if self.inline_editing {
             // Check for Escape key specifically to handle it more reliably
             if ctx.input(|i| i.key_pressed(Key::Escape)) {
@@ -421,10 +439,14 @@ impl eframe::App for SpreadsheetApp {
             }
         } else {
             // Handle navigation keys when not editing
-            if ctx.input(|i| i.key_pressed(Key::Tab)) || ctx.input(|i| i.key_pressed(Key::ArrowRight)) {
+            if ctx.input(|i| i.key_pressed(Key::Tab))
+                || ctx.input(|i| i.key_pressed(Key::ArrowRight))
+            {
                 self.move_selection(0, 1);
             }
-            if ctx.input(|i| i.modifiers.shift && i.key_pressed(Key::Tab)) || ctx.input(|i| i.key_pressed(Key::ArrowLeft)) {
+            if ctx.input(|i| i.modifiers.shift && i.key_pressed(Key::Tab))
+                || ctx.input(|i| i.key_pressed(Key::ArrowLeft))
+            {
                 self.move_selection(0, -1);
             }
             if ctx.input(|i| i.key_pressed(Key::ArrowUp)) {
@@ -483,8 +505,6 @@ impl eframe::App for SpreadsheetApp {
                 }
             }
 
-
-
             // Ctrl+S for save
             if ctx.input(|i| i.modifiers.ctrl && i.key_pressed(Key::S)) {
                 self.save_spreadsheet();
@@ -501,26 +521,31 @@ impl eframe::App for SpreadsheetApp {
             }
 
             // Start editing on F2 or when typing any printable character
-            if ctx.input(|i| i.key_pressed(Key::F2) ||
-                (!i.modifiers.ctrl && !i.modifiers.alt && !i.key_down(Key::Tab) &&
-                    i.events.iter().any(|e| {
-                        if let egui::Event::Text(text) = e {
-                            !text.is_empty() && text.chars().next().unwrap().is_ascii_graphic()
-                        } else {
-                            false
-                        }
-                    }))) {
+            if ctx.input(|i| {
+                i.key_pressed(Key::F2)
+                    || (!i.modifiers.ctrl
+                        && !i.modifiers.alt
+                        && !i.key_down(Key::Tab)
+                        && i.events.iter().any(|e| {
+                            if let egui::Event::Text(text) = e {
+                                !text.is_empty() && text.chars().next().unwrap().is_ascii_graphic()
+                            } else {
+                                false
+                            }
+                        }))
+            }) {
                 self.editing = true;
 
                 // Also start inline editing if we detect text input
-                if ctx.input(|i| i.events.iter().any(|e| {
-                    matches!(e, egui::Event::Text(_))
-                })) {
+                if ctx.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::Text(_)))) {
                     self.start_inline_editing();
                     // Capture the first character typed
-                    if let Some(egui::Event::Text(text)) = ctx.input(|i|
-                        i.events.iter().find(|e| matches!(e, egui::Event::Text(_))).cloned()
-                    ) {
+                    if let Some(egui::Event::Text(text)) = ctx.input(|i| {
+                        i.events
+                            .iter()
+                            .find(|e| matches!(e, egui::Event::Text(_)))
+                            .cloned()
+                    }) {
                         self.inline_edit_value = text;
                     }
                 }
@@ -587,7 +612,8 @@ impl eframe::App for SpreadsheetApp {
                     if ui.button("Undo").clicked() {
                         if self.backend.undo() {
                             self.status_message = "Undo successful".to_string();
-                            if let Some(formula) = self.backend.get_cell_formula(self.selected_cell) {
+                            if let Some(formula) = self.backend.get_cell_formula(self.selected_cell)
+                            {
                                 self.formula_input = format!("={}", formula);
                             } else {
                                 self.formula_input = self.render_cell_value(self.selected_cell);
@@ -600,7 +626,8 @@ impl eframe::App for SpreadsheetApp {
                     if ui.button("Redo").clicked() {
                         if self.backend.redo() {
                             self.status_message = "Redo successful".to_string();
-                            if let Some(formula) = self.backend.get_cell_formula(self.selected_cell) {
+                            if let Some(formula) = self.backend.get_cell_formula(self.selected_cell)
+                            {
                                 self.formula_input = format!("={}", formula);
                             } else {
                                 self.formula_input = self.render_cell_value(self.selected_cell);
@@ -645,8 +672,9 @@ impl eframe::App for SpreadsheetApp {
                         self.search_value = search_text;
                     }
 
-                    if (response.lost_focus() && ctx.input(|i| i.key_pressed(Key::Enter))) ||
-                        (response.has_focus() && ctx.input(|i| i.key_pressed(Key::Enter))) {
+                    if (response.lost_focus() && ctx.input(|i| i.key_pressed(Key::Enter)))
+                        || (response.has_focus() && ctx.input(|i| i.key_pressed(Key::Enter)))
+                    {
                         self.search_next();
                         // Return focus to search field after searching
                         ui.memory_mut(|mem| mem.request_focus(response.id));
@@ -675,7 +703,7 @@ impl eframe::App for SpreadsheetApp {
             // We don't need explicit event consumption since we're checking
             // for self.show_search_panel before starting cell editing elsewhere
         }
-        
+
         // Formula bar
         egui::TopBottomPanel::top("formula_bar").show(ctx, |ui| {
             ui.horizontal(|ui| {
@@ -757,20 +785,24 @@ impl eframe::App for SpreadsheetApp {
                 .resizable(true)
                 .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
                 .column(egui_extras::Column::auto().at_least(40.0))
-                .columns(egui_extras::Column::auto().at_least(self.col_width), self.display_cols as usize);
+                .columns(
+                    egui_extras::Column::auto().at_least(self.col_width),
+                    self.display_cols as usize,
+                );
 
-            table.header(20.0, |mut header| {
-                header.col(|ui| {
-                    ui.strong("");
-                });
-
-                for col in 0..self.display_cols {
-                    let col_idx = self.view_top_left.col + col;
+            table
+                .header(20.0, |mut header| {
                     header.col(|ui| {
-                        ui.strong(Self::cell_to_label(col_idx));
+                        ui.strong("");
                     });
-                }
-            })
+
+                    for col in 0..self.display_cols {
+                        let col_idx = self.view_top_left.col + col;
+                        header.col(|ui| {
+                            ui.strong(Self::cell_to_label(col_idx));
+                        });
+                    }
+                })
                 .body(|mut body| {
                     for row in 0..self.display_rows {
                         let row_idx = self.view_top_left.row + row;
@@ -784,7 +816,8 @@ impl eframe::App for SpreadsheetApp {
                             for col in 0..self.display_cols {
                                 let col_idx = self.view_top_left.col + col;
                                 let cell = AbsCell::new(row_idx, col_idx);
-                                let is_selected = self.selected_cell.row == row_idx && self.selected_cell.col == col_idx;
+                                let is_selected = self.selected_cell.row == row_idx
+                                    && self.selected_cell.col == col_idx;
 
                                 row.col(|ui| {
                                     // Check if this is the selected cell and we're inline editing
@@ -811,10 +844,13 @@ impl eframe::App for SpreadsheetApp {
                                             self.inline_editing = false;
                                             self.editing = false;
                                             // Restore the formula input to the original value
-                                            if let Some(formula) = self.backend.get_cell_formula(self.selected_cell) {
+                                            if let Some(formula) =
+                                                self.backend.get_cell_formula(self.selected_cell)
+                                            {
                                                 self.formula_input = format!("={}", formula);
                                             } else {
-                                                self.formula_input = self.render_cell_value(self.selected_cell);
+                                                self.formula_input =
+                                                    self.render_cell_value(self.selected_cell);
                                             }
                                         } else if ctx.input(|i| i.key_pressed(Key::Tab)) {
                                             // Commit changes and move to next/previous cell when Tab is pressed
@@ -824,7 +860,9 @@ impl eframe::App for SpreadsheetApp {
                                             } else {
                                                 self.move_selection(0, 1);
                                             }
-                                        } else if response.lost_focus() && !ctx.input(|i| i.key_pressed(Key::Escape)) {
+                                        } else if response.lost_focus()
+                                            && !ctx.input(|i| i.key_pressed(Key::Escape))
+                                        {
                                             // Commit changes when focus is lost (unless it's because Escape was pressed)
                                             self.handle_cell_edit(&self.inline_edit_value.clone());
                                         }
@@ -843,15 +881,18 @@ impl eframe::App for SpreadsheetApp {
                                             ui.painter().rect_filled(
                                                 rect,
                                                 0.0,
-                                                Color32::from_rgb(0, 0, 0) // Light blue background
+                                                Color32::from_rgb(0, 0, 0), // Light blue background
                                             );
 
                                             // Border for selected cell
                                             ui.painter().rect_stroke(
                                                 rect,
                                                 0.0,
-                                                egui::Stroke::new(2.0, Color32::from_rgb(0, 90, 180)), // Darker blue border
-                                                egui::StrokeKind::Middle
+                                                egui::Stroke::new(
+                                                    2.0,
+                                                    Color32::from_rgb(0, 90, 180),
+                                                ), // Darker blue border
+                                                egui::StrokeKind::Middle,
                                             );
                                         }
 
@@ -871,7 +912,9 @@ impl eframe::App for SpreadsheetApp {
                                         if response.clicked() {
                                             // If we were editing another cell, commit those changes
                                             if self.inline_editing {
-                                                self.handle_cell_edit(&self.inline_edit_value.clone());
+                                                self.handle_cell_edit(
+                                                    &self.inline_edit_value.clone(),
+                                                );
                                             }
 
                                             self.selected_cell = cell;
@@ -879,7 +922,9 @@ impl eframe::App for SpreadsheetApp {
                                             self.editing = false;
 
                                             // Update formula input when selecting a cell
-                                            if let Some(formula) = self.backend.get_cell_formula(self.selected_cell) {
+                                            if let Some(formula) =
+                                                self.backend.get_cell_formula(self.selected_cell)
+                                            {
                                                 self.formula_input = format!("={}", formula);
                                             } else {
                                                 self.formula_input = cell_value;
@@ -913,7 +958,7 @@ pub fn run_spreadsheet_app() -> Result<(), eframe::Error> {
     eframe::run_native(
         "Spreadsheet",
         options,
-        Box::new(|_cc| Ok(Box::new(SpreadsheetApp::new())))
+        Box::new(|_cc| Ok(Box::new(SpreadsheetApp::new()))),
     )
 }
 

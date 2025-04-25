@@ -6,7 +6,7 @@ use std::time::Duration;
 
 type ChildNormalType = (String, HashSet<(u16, u16)>);
 type ChildRangeType = (String, (u16, u16), (u16, u16));
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Copy)]
 pub enum Cell {
     Value(i32),
     Err,
@@ -33,7 +33,7 @@ pub struct Spreadsheet {
     pub rows: usize,
     pub cols: usize,
     pub parents_normal: HashMap<(u16, u16), HashSet<(u16, u16)>>,
-    pub child_normal: HashMap<(u16, u16) , ChildNormalType>,
+    pub child_normal: HashMap<(u16, u16), ChildNormalType>,
     pub child_range: HashMap<(u16, u16), ChildRangeType>,
     pub cells: Vec<Vec<Cell>>,
 }
@@ -78,7 +78,7 @@ impl Spreadsheet {
         // println!("child: {:?}", self.child_normal);
         // println!("child_range: {:?}", self.child_range);
         // 1) clear old dependencies but save them first
-        let old_cell_value = self.cells[coord.1 as usize][coord.0 as usize].clone();
+        let old_cell_value = self.cells[coord.1 as usize][coord.0 as usize];
         let mut removed_from_parents = Vec::new();
         let old_child_normal = self.child_normal.remove(&coord);
         let old_child_range = self.child_range.remove(&coord);
@@ -213,19 +213,20 @@ impl Spreadsheet {
                 }
             };
 
-            let new_cell = if op_code == 5 && b == Cell::Value(0) || a == Cell::Err || b == Cell::Err  {
-                Cell::Err
-            }
-            //else if both are values
-            else if let (Cell::Value(va), Cell::Value(vb)) = (a, b) {
-                if let Some(v) = eval_binary(op_code, va, vb) {
-                    Cell::Value(v)
-                } else {
-                    return 5; // division by zero
+            let new_cell =
+                if op_code == 5 && b == Cell::Value(0) || a == Cell::Err || b == Cell::Err {
+                    Cell::Err
                 }
-            } else {
-                return 3;
-            };
+                //else if both are values
+                else if let (Cell::Value(va), Cell::Value(vb)) = (a, b) {
+                    if let Some(v) = eval_binary(op_code, va, vb) {
+                        Cell::Value(v)
+                    } else {
+                        return 5; // division by zero
+                    }
+                } else {
+                    return 3;
+                };
             let mut updated_parents = Vec::new();
             // adding new dependencies
             let mut refs = HashSet::new();
@@ -688,4 +689,335 @@ fn is_within_range(cell: (u16, u16), start: (u16, u16), end: (u16, u16)) -> bool
 
     // Check if the cell is within the range bounds
     col >= min_col && col <= max_col && row >= min_row && row <= max_row
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    // Assuming myparser module is in your crate
+
+    #[test]
+    fn test_col_to_letter() {
+        assert_eq!(col_to_letter(1), "A");
+        assert_eq!(col_to_letter(26), "Z");
+        assert_eq!(col_to_letter(27), "AA");
+        assert_eq!(col_to_letter(52), "AZ");
+        assert_eq!(col_to_letter(53), "BA");
+        assert_eq!(col_to_letter(702), "ZZ");
+        assert_eq!(col_to_letter(703), "AAA");
+    }
+
+    #[test]
+    fn test_set_literal_value() {
+        let mut sheet = Spreadsheet::new(10, 10);
+
+        // Test setting a literal value
+        let result = sheet.set_cell((1, 1), "42");
+        assert_eq!(result, 0); // Success
+        assert_eq!(sheet.get_val((1, 1)), Some(42));
+
+        // Test setting a negative value
+        let result = sheet.set_cell((2, 2), "-123");
+        assert_eq!(result, 0); // Success
+        assert_eq!(sheet.get_val((2, 2)), Some(-123));
+    }
+
+    #[test]
+    fn test_set_invalid_cell() {
+        let mut sheet = Spreadsheet::new(10, 10);
+
+        // Test setting a value to a cell outside the bounds
+        let result = sheet.set_cell((11, 11), "42");
+        assert_eq!(result, 1); // Invalid cell code
+
+        // Cells within bounds should be settable
+        let result = sheet.set_cell((10, 10), "42");
+        assert_eq!(result, 0); // Success
+    }
+
+    #[test]
+    fn test_set_cell_reference() {
+        let mut sheet = Spreadsheet::new(10, 10);
+
+        // Set a literal value in A1
+        sheet.set_cell((1, 1), "42");
+
+        // Set B2 to reference A1
+        let result = sheet.set_cell((2, 2), "A1");
+        assert_eq!(result, 0); // Success
+        assert_eq!(sheet.get_val((2, 2)), Some(42));
+
+        // Verify dependency is tracked
+        assert!(sheet.parents_normal.contains_key(&(1, 1)));
+        assert!(sheet.parents_normal.get(&(1, 1)).unwrap().contains(&(2, 2)));
+        assert!(sheet.child_normal.contains_key(&(2, 2)));
+
+        // Change A1 and verify B2 updates
+        sheet.set_cell((1, 1), "99");
+        assert_eq!(sheet.get_val((1, 1)), Some(99));
+        assert_eq!(sheet.get_val((2, 2)), Some(99));
+    }
+
+    #[test]
+    fn test_set_binary_formula() {
+        let mut sheet = Spreadsheet::new(10, 10);
+
+        // Set some values
+        sheet.set_cell((1, 1), "5");
+        sheet.set_cell((2, 2), "10");
+
+        // Test addition
+        let result = sheet.set_cell((3, 3), "A1+B2");
+        assert_eq!(result, 0); // Success
+        assert_eq!(sheet.get_val((3, 3)), Some(15));
+
+        // Test subtraction
+        let result = sheet.set_cell((4, 4), "B2-A1");
+        assert_eq!(result, 0); // Success
+        assert_eq!(sheet.get_val((4, 4)), Some(5));
+
+        // Test multiplication
+        let result = sheet.set_cell((5, 5), "A1*B2");
+        assert_eq!(result, 0); // Success
+        assert_eq!(sheet.get_val((5, 5)), Some(50));
+
+        // Test division
+        let result = sheet.set_cell((6, 6), "B2/A1");
+        assert_eq!(result, 0); // Success
+        assert_eq!(sheet.get_val((6, 6)), Some(2));
+
+        // Test division by zero
+        let result = sheet.set_cell((7, 7), "A1/0");
+        assert_eq!(result, 0); // It should still succeed but cell value is ERR
+        assert_eq!(sheet.get_val((7, 7)), None);
+
+        // Test with literal and cell reference
+        let result = sheet.set_cell((8, 8), "A1+20");
+        assert_eq!(result, 0); // Success
+        assert_eq!(sheet.get_val((8, 8)), Some(25));
+    }
+
+    #[test]
+    fn test_range_functions() {
+        let mut sheet = Spreadsheet::new(10, 10);
+
+        // Set some values
+        sheet.set_cell((1, 1), "10");
+        sheet.set_cell((2, 1), "20");
+        sheet.set_cell((3, 1), "30");
+        sheet.set_cell((1, 2), "40");
+        sheet.set_cell((2, 2), "50");
+        sheet.set_cell((3, 2), "60");
+
+        // Test SUM
+        let result = sheet.set_cell((5, 5), "SUM(A1:C2)");
+        assert_eq!(result, 0); // Success
+        assert_eq!(sheet.get_val((5, 5)), Some(210)); // 10+20+30+40+50+60
+
+        // Test AVERAGE
+        let result = sheet.set_cell((6, 6), "AVG(A1:C2)");
+        assert_eq!(result, 0); // Success
+        assert_eq!(sheet.get_val((6, 6)), Some(35)); // (10+20+30+40+50+60)/6
+
+        // Test MIN
+        let result = sheet.set_cell((7, 7), "MIN(A1:C2)");
+        assert_eq!(result, 0); // Success
+        assert_eq!(sheet.get_val((7, 7)), Some(10));
+
+        // Test MAX
+        let result = sheet.set_cell((8, 8), "MAX(A1:C2)");
+        assert_eq!(result, 0); // Success
+        assert_eq!(sheet.get_val((8, 8)), Some(60));
+
+        // Test invalid range (start > end)
+        let result = sheet.set_cell((9, 9), "SUM(C2:A1)");
+        assert_eq!(result, 3); // Invalid command code
+    }
+
+    #[test]
+    fn test_sleep_function() {
+        let mut sheet = Spreadsheet::new(10, 10);
+
+        // Set a literal sleep time (0 to avoid actually sleeping in tests)
+        let result = sheet.set_cell((1, 1), "SLEEP(0)");
+        assert_eq!(result, 0); // Success
+        assert_eq!(sheet.get_val((1, 1)), Some(0));
+
+        // Set a cell with a value
+        sheet.set_cell((2, 2), "5");
+
+        // Set a sleep with cell reference
+        let result = sheet.set_cell((3, 3), "SLEEP(B2)");
+        assert_eq!(result, 0); // Success
+        assert_eq!(sheet.get_val((3, 3)), Some(5));
+
+        // Test with invalid range in SLEEP
+        let result = sheet.set_cell((4, 4), "SLEEP(A1:B2)");
+        assert_eq!(result, 3); // Invalid command code
+    }
+
+    #[test]
+    fn test_cycle_detection() {
+        let mut sheet = Spreadsheet::new(10, 10);
+
+        // Create a valid dependency chain: A1 -> B2 -> C3
+        sheet.set_cell((1, 1), "42");
+        sheet.set_cell((2, 2), "A1");
+        sheet.set_cell((3, 3), "B2");
+
+        // Try to create a cycle: C3 -> A1 (would make A1 -> B2 -> C3 -> A1)
+        let result = sheet.set_cell((1, 1), "C3");
+        assert_eq!(result, 4); // Cycle detected code
+
+        // A1 should still have its original value
+        assert_eq!(sheet.get_val((1, 1)), Some(42));
+
+        // Test direct self-reference
+        let result = sheet.set_cell((4, 4), "D4");
+        assert_eq!(result, 4); // Cycle detected code
+
+        // Test cycle with range function
+        sheet.set_cell((5, 5), "10");
+        let result = sheet.set_cell((5, 5), "SUM(E5:E5)");
+        assert_eq!(result, 4); // Cycle detected code
+    }
+
+    #[test]
+    fn test_dependency_recalculation() {
+        let mut sheet = Spreadsheet::new(10, 10);
+
+        // Setup a chain of dependencies
+        sheet.set_cell((1, 1), "5"); // A1 = 5
+        sheet.set_cell((2, 2), "A1*2"); // B2 = A1*2 = 10
+        sheet.set_cell((3, 3), "B2+3"); // C3 = B2+3 = 13
+
+        // Verify initial values
+        assert_eq!(sheet.get_val((1, 1)), Some(5));
+        assert_eq!(sheet.get_val((2, 2)), Some(10));
+        assert_eq!(sheet.get_val((3, 3)), Some(13));
+
+        // Change A1 and verify chain updates
+        sheet.set_cell((1, 1), "7");
+        assert_eq!(sheet.get_val((1, 1)), Some(7));
+        assert_eq!(sheet.get_val((2, 2)), Some(14)); // B2 = 7*2 = 14
+        assert_eq!(sheet.get_val((3, 3)), Some(17)); // C3 = 14+3 = 17
+    }
+
+    #[test]
+    fn test_range_dependency_updates() {
+        let mut sheet = Spreadsheet::new(10, 10);
+
+        // Set some values in a range
+        sheet.set_cell((1, 1), "10");
+        sheet.set_cell((2, 1), "20");
+        sheet.set_cell((1, 2), "30");
+        sheet.set_cell((2, 2), "40");
+
+        // Set a cell using range function
+        sheet.set_cell((5, 5), "SUM(A1:B2)");
+        assert_eq!(sheet.get_val((5, 5)), Some(100)); // 10+20+30+40
+
+        // Change a value in the range and verify sum updates
+        sheet.set_cell((1, 1), "15");
+        assert_eq!(sheet.get_val((5, 5)), Some(105)); // 15+20+30+40
+    }
+
+    #[test]
+    fn test_error_propagation() {
+        let mut sheet = Spreadsheet::new(10, 10);
+
+        // Create a division by zero error
+        sheet.set_cell((1, 1), "10/0");
+        assert_eq!(sheet.get_val((1, 1)), None); // None indicates Cell::Err
+
+        // Reference the error cell
+        sheet.set_cell((2, 2), "A1");
+        assert_eq!(sheet.get_val((2, 2)), None); // Error should propagate
+
+        // Use the error cell in a formula
+        sheet.set_cell((3, 3), "A1+5");
+        assert_eq!(sheet.get_val((3, 3)), None); // Error should propagate
+
+        // Use the error cell in a range function
+        sheet.set_cell((4, 4), "SUM(A1:A1)");
+        assert_eq!(sheet.get_val((4, 4)), None); // Error should propagate
+    }
+
+    /*    #[test]
+    fn test_invalid_formulas() {
+        let mut sheet = Spreadsheet::new(10, 10);
+
+        // Test invalid operator
+        let result = sheet.set_cell((1, 1), "10%5");
+        assert_eq!(result, 3); // Invalid command code
+
+        // Test invalid range function
+        let result = sheet.set_cell((2, 2), "INVALID(A1:B2)");
+        assert_eq!(result, 3); // Invalid command code
+
+        // Test formula with syntax error
+        let result = sheet.set_cell((3, 3), "A1++B2");
+        assert_eq!(result, 3); // Invalid command code
+    }*/
+
+    #[test]
+    fn test_mixed_references_and_literals() {
+        let mut sheet = Spreadsheet::new(10, 10);
+
+        sheet.set_cell((1, 1), "10");
+
+        // Test with cell reference and literal
+        let result = sheet.set_cell((2, 2), "A1+5");
+        assert_eq!(result, 0);
+        assert_eq!(sheet.get_val((2, 2)), Some(15));
+
+        // Test with literal and cell reference
+        let result = sheet.set_cell((3, 3), "5+A1");
+        assert_eq!(result, 0);
+        assert_eq!(sheet.get_val((3, 3)), Some(15));
+
+        // Test with cell reference and cell reference
+        sheet.set_cell((4, 4), "20");
+        let result = sheet.set_cell((5, 5), "A1+D4");
+        assert_eq!(result, 0);
+        assert_eq!(sheet.get_val((5, 5)), Some(30));
+    }
+
+    #[test]
+    fn test_clear_dependencies() {
+        let mut sheet = Spreadsheet::new(10, 10);
+
+        // Setup dependencies
+        sheet.set_cell((1, 1), "10");
+        sheet.set_cell((2, 2), "A1");
+
+        // Verify dependency exists
+        assert!(sheet.parents_normal.contains_key(&(1, 1)));
+        assert!(sheet.parents_normal.get(&(1, 1)).unwrap().contains(&(2, 2)));
+        assert!(sheet.child_normal.contains_key(&(2, 2)));
+
+        // Change B2 to a literal
+        sheet.set_cell((2, 2), "20");
+
+        // Verify dependency is removed
+        assert!(!sheet.parents_normal.get(&(1, 1)).unwrap().contains(&(2, 2)));
+        let a = sheet.child_normal.get(&(2, 2));
+        assert!(a.is_none());
+    }
+
+    #[test]
+    fn test_is_within_range() {
+        // Test cell inside range
+        assert!(is_within_range((2, 2), (1, 1), (3, 3)));
+
+        // Test cell on the edge of range
+        assert!(is_within_range((1, 1), (1, 1), (3, 3)));
+        assert!(is_within_range((3, 3), (1, 1), (3, 3)));
+
+        // Test cell outside range
+        assert!(!is_within_range((4, 4), (1, 1), (3, 3)));
+
+        // Test with reversed range coordinates
+        assert!(is_within_range((2, 2), (3, 3), (1, 1)));
+    }
 }

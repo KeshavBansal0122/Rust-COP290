@@ -56,9 +56,10 @@ impl MyParser {
                 if let Some(colon) = inside.find(':') {
                     let a = inside[..colon].trim();
                     let b = inside[colon + 1..].trim();
-                    if let (Some(s), Some(e)) =
-                        (MyParser::cell_name_to_coord(a), MyParser::cell_name_to_coord(b))
-                    {
+                    if let (Some(s), Some(e)) = (
+                        MyParser::cell_name_to_coord(a),
+                        MyParser::cell_name_to_coord(b),
+                    ) {
                         return Some((func, s, e));
                     }
                 }

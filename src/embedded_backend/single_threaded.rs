@@ -20,7 +20,6 @@ pub struct EmbeddedBackend {
 }
 
 impl EmbeddedBackend {
-    
     pub fn new(rows: u16, cols: u16) -> Self {
         EmbeddedBackend {
             storage: Storage::new(rows, cols),
@@ -29,7 +28,7 @@ impl EmbeddedBackend {
             redo_stack: Vec::new(),
         }
     }
-    
+
     pub fn from_file(file: &File) -> io::Result<Self> {
         let storage = Storage::from_file(file)?;
         Ok(EmbeddedBackend {
@@ -39,14 +38,14 @@ impl EmbeddedBackend {
             redo_stack: Vec::new(),
         })
     }
-    
+
     pub fn save_to_file(&self, file: &File) -> io::Result<()> {
         self.storage.serialize_to_file(file)
     }
     pub fn set_cell_empty(&mut self, cell: AbsCell) {
         self.set_cell_value(cell, CellValue::Empty);
     }
-    
+
     pub fn set_cell_value(&mut self, cell: AbsCell, value: CellValue) {
         let old = self.storage.get_input(cell);
         let new = CellInput::Value(value.clone());
@@ -61,7 +60,7 @@ impl EmbeddedBackend {
             self.redo_stack.clear();
         }
     }
-    
+
     pub fn get_cell_value(&self, cell: AbsCell) -> &Result<CellValue, CellError> {
         self.storage.get_value(cell)
     }
@@ -69,18 +68,26 @@ impl EmbeddedBackend {
     pub fn get_cell_formula(&self, cell: AbsCell) -> Option<String> {
         self.storage.get_cell_formula(cell)
     }
-    
-    pub fn get_cell_range(&self,
-                          top_left: AbsCell,
-                          bottom_right: AbsCell
+
+    pub fn get_cell_range(
+        &self,
+        top_left: AbsCell,
+        bottom_right: AbsCell,
     ) -> impl Iterator<Item = (AbsCell, &CellData)> {
         self.storage.get_value_range_full(top_left, bottom_right)
     }
-    
-    pub fn set_cell_formula(&mut self, cell: AbsCell, formula: &str) -> Result<(), ExpressionError> {
-        let new = self.parser.parse(formula, cell).map_err(|_| ExpressionError::InvalidExpression)?;
+
+    pub fn set_cell_formula(
+        &mut self,
+        cell: AbsCell,
+        formula: &str,
+    ) -> Result<(), ExpressionError> {
+        let new = self
+            .parser
+            .parse(formula, cell)
+            .map_err(|_| ExpressionError::InvalidExpression)?;
         let old = self.storage.get_input(cell);
-        
+
         let res = self.storage.set_expression(cell, new);
         if let StorageError::None = res {
             let action = Action {
@@ -101,7 +108,7 @@ impl EmbeddedBackend {
         // }
         // if !self.storage.set_expression(cell, new) {
         //     Err(ExpressionError::CircularReference)
-        // } else { 
+        // } else {
         //     let action = Action {
         //         cell,
         //         old_value: old,
@@ -114,7 +121,7 @@ impl EmbeddedBackend {
         //     Ok(())
         // }
     }
-    
+
     /// Returns true if the undo stack was not empty and undo actually happened
     pub fn undo(&mut self) -> bool {
         if let Some(action) = self.undo_stack.pop() {
@@ -134,7 +141,7 @@ impl EmbeddedBackend {
             false
         }
     }
-    
+
     /// Returns true if the redo stack was not empty and redo actually happened
     pub fn redo(&mut self) -> bool {
         if let Some(action) = self.redo_stack.pop() {
@@ -154,24 +161,27 @@ impl EmbeddedBackend {
             false
         }
     }
-    
-    pub fn copy_cell_expression(&mut self, from: AbsCell, to: AbsCell) -> Result<(), ExpressionError> {
+
+    pub fn copy_cell_expression(
+        &mut self,
+        from: AbsCell,
+        to: AbsCell,
+    ) -> Result<(), ExpressionError> {
         match self.storage.copy_cell_expression(from, to) {
             StorageError::CircularDependency => Err(ExpressionError::CircularReference),
             StorageError::InvalidCell => Err(ExpressionError::InvalidExpression),
-            StorageError::None => Ok(())
+            StorageError::None => Ok(()),
         }
     }
-    
-    
+
     pub fn search(&self, cell: AbsCell, to_search: &str) -> Option<AbsCell> {
         self.storage.search(cell, to_search)
     }
-    
+
     pub fn search_from_start(&self, to_search: &str) -> Option<AbsCell> {
         self.storage.search_from_start(to_search)
     }
-    
+
     /// Saves a rectangular range of cells to a CSV file.
     ///
     /// # Arguments
@@ -216,7 +226,7 @@ mod tests {
     use crate::common::cell_value::CellValue;
     use crate::common::structs::AbsCell;
     use std::str::FromStr;
-    // 
+    //
     // #[test]
     // fn test_new_backend() {
     //     let backend = EmbeddedBackend::new(10, 10);
@@ -242,4 +252,3 @@ mod tests {
         assert_eq!(backend.get_cell_value(cell), &Ok(CellValue::Number(42.0)));
     }
 }
-

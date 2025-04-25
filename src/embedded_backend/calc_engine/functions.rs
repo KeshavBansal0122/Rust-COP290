@@ -15,14 +15,14 @@ pub fn max(storage: &Storage, cell: AbsCell, range: &CellRange) -> Result<f64, C
                 CellValue::Number(x) => {
                     max_value = max_value.max(*x);
                     is_range_empty = false;
-                },
+                }
                 CellValue::String(_) => return Err(CellError::DependsOnNonNumeric),
                 CellValue::Empty => {}
             },
-            Err(_) => return Err(CellError::DependsOnErr)
+            Err(_) => return Err(CellError::DependsOnErr),
         }
     }
-    
+
     if is_range_empty {
         return Ok(0.0);
     }
@@ -42,14 +42,14 @@ pub fn min(storage: &Storage, cell: AbsCell, range: &CellRange) -> Result<f64, C
                 CellValue::Number(x) => {
                     min_value = min_value.min(*x);
                     is_range_empty = false;
-                },
+                }
                 CellValue::String(_) => return Err(CellError::DependsOnNonNumeric),
                 CellValue::Empty => {}
             },
             Err(_) => return Err(CellError::DependsOnErr),
         }
     }
-    
+
     if is_range_empty {
         return Ok(0.0);
     }
@@ -64,16 +64,14 @@ pub fn average(storage: &Storage, cell: AbsCell, range: &CellRange) -> Result<f6
     let mut count = 0;
     for (_, val) in storage.get_value_range_sparse(top_left, bottom_right) {
         match val {
-            Ok(val) => {
-                match val {
-                    CellValue::Number(x) => {
-                        total += *x;
-                        count += 1;
-                    }
-                    CellValue::String(_) => return Err(CellError::DependsOnNonNumeric),
-                    CellValue::Empty => {}
+            Ok(val) => match val {
+                CellValue::Number(x) => {
+                    total += *x;
+                    count += 1;
                 }
-            }
+                CellValue::String(_) => return Err(CellError::DependsOnNonNumeric),
+                CellValue::Empty => {}
+            },
             Err(_) => return Err(CellError::DependsOnErr),
         }
     }
@@ -92,13 +90,11 @@ pub fn sum(storage: &Storage, cell: AbsCell, range: &CellRange) -> Result<f64, C
     let mut total = 0.0;
     for (_, val) in storage.get_value_range_sparse(top_left, bottom_right) {
         match val {
-            Ok(val) => {
-                match val {
-                    CellValue::Number(x) => total += *x,
-                    CellValue::String(_) => return Err(CellError::DependsOnNonNumeric),
-                    CellValue::Empty => {}
-                }
-            }
+            Ok(val) => match val {
+                CellValue::Number(x) => total += *x,
+                CellValue::String(_) => return Err(CellError::DependsOnNonNumeric),
+                CellValue::Empty => {}
+            },
             Err(_) => return Err(CellError::DependsOnErr),
         }
     }
@@ -114,16 +110,14 @@ pub fn stdev(storage: &Storage, cell: AbsCell, range: &CellRange) -> Result<f64,
     let mut count = 0;
     for (_, val) in storage.get_value_range_sparse(top_left, bottom_right) {
         match val {
-            Ok(val) => {
-                match val {
-                    CellValue::Number(x) => {
-                        total += *x;
-                        count += 1;
-                    }
-                    CellValue::String(_) => return Err(CellError::DependsOnNonNumeric),
-                    CellValue::Empty => {}
+            Ok(val) => match val {
+                CellValue::Number(x) => {
+                    total += *x;
+                    count += 1;
                 }
-            }
+                CellValue::String(_) => return Err(CellError::DependsOnNonNumeric),
+                CellValue::Empty => {}
+            },
             Err(_) => return Err(CellError::DependsOnErr),
         }
     }
@@ -137,15 +131,13 @@ pub fn stdev(storage: &Storage, cell: AbsCell, range: &CellRange) -> Result<f64,
     let mut variance = 0.0;
     for (_, val) in storage.get_value_range_sparse(top_left, bottom_right) {
         match val {
-            Ok(val) => {
-                match val {
-                    CellValue::Number(x) => {
-                        variance += (*x - mean).powi(2);
-                    }
-                    CellValue::String(_) => return Err(CellError::DependsOnNonNumeric),
-                    CellValue::Empty => {}
+            Ok(val) => match val {
+                CellValue::Number(x) => {
+                    variance += (*x - mean).powi(2);
                 }
-            }
+                CellValue::String(_) => return Err(CellError::DependsOnNonNumeric),
+                CellValue::Empty => {}
+            },
             Err(_) => return Err(CellError::DependsOnErr),
         }
     }
