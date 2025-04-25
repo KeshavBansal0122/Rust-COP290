@@ -14,7 +14,7 @@ build:
 # Wipe out target/
 clean:
 	cargo clean
-
+	@rm -f tarpaulin-report.html
 # CLI run: rows × cols
 run: build
 	cargo run --release -- 999 18278
@@ -25,7 +25,7 @@ ext1: build
 
 # Run all Rust tests
 test:
-	cargo test
+	cargo test --release
 
 # Code‐coverage (Tarpaulin)
 coverage:
@@ -33,22 +33,11 @@ coverage:
 
 # Generate HTML docs + PDF
 docs:
-	cargo doc --no-deps
-	# convert the HTML index to PDF (requires wkhtmltopdf or pandoc)
-	@if [ -f target/doc/$(shell basename `pwd`)/index.html ]; then \
-	  wkhtmltopdf \
-	    target/doc/$(shell basename `pwd`)/index.html \
-	    target/doc/$(shell basename `pwd`).pdf; \
+	cargo doc --no-deps --all-features --document-private-items
+	@if [ -f target/doc/embedded/index.html ]; then \
+		echo "Rust HTML documentation generated successfully."; \
 	else \
-	  echo "Cannot find HTML docs; did 'cargo doc' run successfully?"; \
-	  exit 1; \
+		echo "Rust documentation failed."; \
+		exit 1; \
 	fi
-	
-report: report.pdf
-
-report.pdf: main.tex
 	pdflatex main.tex
-	pdflatex main.tex  # Run twice for references
-
-clean-report:
-	rm -f report.aux report.log report.out report.pdf
