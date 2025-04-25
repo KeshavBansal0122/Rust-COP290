@@ -601,7 +601,14 @@ impl Spreadsheet {
         }
     }
 
-    pub fn display_to<W: std::io::Write>(&self, writer: &mut W, start_row: usize, start_col: usize, max_rows: usize, max_cols: usize) -> std::io::Result<()> {
+    pub fn display_to<W: std::io::Write>(
+        &self,
+        writer: &mut W,
+        start_row: usize,
+        start_col: usize,
+        max_rows: usize,
+        max_cols: usize,
+    ) -> std::io::Result<()> {
         write!(writer, "    ")?;
         for c in (start_col + 1)..=(start_col + max_cols).min(self.cols) {
             write!(writer, "{:>8}", col_to_letter(c))?;
@@ -623,10 +630,16 @@ impl Spreadsheet {
 
     // Keep the original display function for backward compatibility
     pub fn display(&self, start_row: usize, start_col: usize, max_rows: usize, max_cols: usize) {
-        self.display_to(&mut std::io::stdout(), start_row, start_col, max_rows, max_cols)
-            .expect("Failed to write to stdout");
+        self.display_to(
+            &mut std::io::stdout(),
+            start_row,
+            start_col,
+            max_rows,
+            max_cols,
+        )
+        .expect("Failed to write to stdout");
     }
-    
+
     pub fn has_cycle_from(&self, start_cell: (u16, u16)) -> bool {
         let mut visited = HashSet::new();
         let mut path = HashSet::new();
@@ -1089,7 +1102,6 @@ fn test_binary_operations_parsable_expressions() {
     assert_eq!(result, 3); // Should return unrecognized command
 }
 
-
 #[test]
 fn test_formula_cycle_detection_with_sleep() {
     let mut sheet = Spreadsheet::new(10, 10);
@@ -1133,9 +1145,9 @@ fn test_multiple_binary_operation_chains() {
 
     // Setup complex calculation chain
     sheet.set_cell((1, 1), "10");
-    sheet.set_cell((2, 2), "A1*2");  // B2 = 20
-    sheet.set_cell((3, 3), "B2-5");  // C3 = 15
-    sheet.set_cell((4, 4), "C3/3");  // D4 = 5
+    sheet.set_cell((2, 2), "A1*2"); // B2 = 20
+    sheet.set_cell((3, 3), "B2-5"); // C3 = 15
+    sheet.set_cell((4, 4), "C3/3"); // D4 = 5
     sheet.set_cell((5, 5), "D4+A1"); // E5 = 15
 
     // Check initial values
@@ -1148,10 +1160,10 @@ fn test_multiple_binary_operation_chains() {
     sheet.set_cell((1, 1), "20");
 
     assert_eq!(sheet.get_val((1, 1)), Some(20));
-    assert_eq!(sheet.get_val((2, 2)), Some(40));  // B2 = 20*2 = 40
-    assert_eq!(sheet.get_val((3, 3)), Some(35));  // C3 = 40-5 = 35
-    assert_eq!(sheet.get_val((4, 4)), Some(11));  // D4 = 35/3 = 11 (integer division)
-    assert_eq!(sheet.get_val((5, 5)), Some(31));  // E5 = 11+20 = 31
+    assert_eq!(sheet.get_val((2, 2)), Some(40)); // B2 = 20*2 = 40
+    assert_eq!(sheet.get_val((3, 3)), Some(35)); // C3 = 40-5 = 35
+    assert_eq!(sheet.get_val((4, 4)), Some(11)); // D4 = 35/3 = 11 (integer division)
+    assert_eq!(sheet.get_val((5, 5)), Some(31)); // E5 = 11+20 = 31
 }
 
 #[test]
@@ -1159,11 +1171,11 @@ fn test_display_function() {
     let mut sheet = Spreadsheet::new(5, 5);
 
     // Populate with test data
-    sheet.set_cell((1, 1), "10");    // A1
-    sheet.set_cell((2, 2), "20");    // B2
-    sheet.set_cell((3, 3), "30");    // C3
-    sheet.set_cell((4, 4), "A1/0");  // D4 (Error)
-    sheet.set_cell((5, 5), "50");    // E5
+    sheet.set_cell((1, 1), "10"); // A1
+    sheet.set_cell((2, 2), "20"); // B2
+    sheet.set_cell((3, 3), "30"); // C3
+    sheet.set_cell((4, 4), "A1/0"); // D4 (Error)
+    sheet.set_cell((5, 5), "50"); // E5
 
     // Capture output in a string buffer
     let mut output = Vec::new();

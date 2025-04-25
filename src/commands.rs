@@ -277,7 +277,7 @@ mod tests {
     fn test_cell_assignment() {
         let mut handler = CommandHandler::new();
         let mut sheet = Spreadsheet::new(10, 10);
-        
+
         let result = handler.handle_command("", &mut sheet);
         assert!(matches!(result, CommandResult::Ok));
 
