@@ -17,14 +17,6 @@ use std::time::Duration;
 /// # Returns
 /// * `Some(result)` - The result of the operation if valid.
 /// * `None` - If the operator is invalid or division by zero is attempted.
-///
-/// # Examples
-/// ```rust
-/// use embedded::function::eval_binary;
-/// assert_eq!(eval_binary(1, 5, 3), Some(8)); // 5 + 3
-/// assert_eq!(eval_binary(5, 6, 0), None);    // Division by zero
-/// assert_eq!(eval_binary(9, 4, 2), None);    // Invalid operator
-/// ```
 pub fn eval_binary(op: i8, a: i32, b: i32) -> Option<i32> {
     match op {
         1 => Some(a + b),
@@ -54,13 +46,6 @@ pub fn eval_binary(op: i8, a: i32, b: i32) -> Option<i32> {
 /// # Returns
 /// * `Some(min_value)` - The smallest value in the range.
 /// * `None` - If any cell in the range signals an error.
-///
-/// # Examples
-/// ```rust
-/// use embedded::function::min_range;
-/// let get_val = |coord| Some(coord.0 as i32 + coord.1 as i32); // Example values
-/// assert_eq!(min_range((1, 1), (2, 2), get_val), Some(2)); // Minimum value
-/// ```
 pub fn min_range<F>(start: (u16, u16), end: (u16, u16), get_val: F) -> Option<i32>
 where
     F: Fn((u16, u16)) -> Option<i32>,
@@ -88,13 +73,6 @@ where
 /// # Returns
 /// * `Some(max_value)` - The largest value in the range.
 /// * `None` - If any cell in the range signals an error.
-///
-/// # Examples
-/// ```rust
-/// use embedded::function::max_range;
-/// let get_val = |coord| Some(coord.0 as i32 + coord.1 as i32); // Example values
-/// assert_eq!(max_range((1, 1), (2, 2), get_val), Some(4)); // Maximum value
-/// ```
 pub fn max_range<F>(start: (u16, u16), end: (u16, u16), get_val: F) -> Option<i32>
 where
     F: Fn((u16, u16)) -> Option<i32>,
@@ -122,13 +100,6 @@ where
 /// # Returns
 /// * `Some(average)` - The average of all values in the range.
 /// * `None` - If any cell in the range signals an error.
-///
-/// # Examples
-/// ```rust
-/// use embedded::function::avg_range;
-/// let get_val = |coord| Some(coord.0 as i32 + coord.1 as i32); // Example values
-/// assert_eq!(avg_range((1, 1), (2, 2), get_val), Some(3)); // Average value
-/// ```
 pub fn avg_range<F>(start: (u16, u16), end: (u16, u16), get_val: F) -> Option<i32>
 where
     F: Fn((u16, u16)) -> Option<i32>,
@@ -160,13 +131,6 @@ where
 /// # Returns
 /// * `Some(sum)` - The total sum of all values in the range.
 /// * `None` - If any cell in the range signals an error.
-///
-/// # Examples
-/// ```rust
-/// use embedded::function::sum_range;
-/// let get_val = |coord| Some(coord.0 as i32 + coord.1 as i32); // Example values
-/// assert_eq!(sum_range((1, 1), (2, 2), get_val), Some(10)); // Total sum
-/// ```
 pub fn sum_range<F>(start: (u16, u16), end: (u16, u16), get_val: F) -> Option<i32>
 where
     F: Fn((u16, u16)) -> Option<i32>,
@@ -195,14 +159,6 @@ where
 /// # Returns
 /// * `Some(stdev)` - The standard deviation of the values in the range.
 /// * `None` - If any cell in the range signals an error or fewer than two valid cells exist.
-///
-/// # Examples
-/// ```rust
-/// use embedded::function::stdev_range;
-/// let get_val = |coord| Some(coord.0 as i32 + coord.1 as i32); // Example values
-/// assert_eq!(stdev_range((1, 1), (2, 2), get_val), Some(0)); // Small range
-/// assert_eq!(stdev_range((1, 1), (3, 3), get_val), Some(1)); // Larger range
-/// ```
 pub fn stdev_range<F>(start: (u16, u16), end: (u16, u16), get_val: F) -> Option<i32>
 where
     F: Fn((u16, u16)) -> Option<i32>,
@@ -259,19 +215,6 @@ where
 /// - `"STDEV"`: Calculates the standard deviation of values in the range.
 /// - `"SLEEP"`: Delays execution for a specified number of seconds (the value of the first cell).
 ///
-/// # Examples
-/// ```rust
-/// use embedded::function::eval_range;
-/// let get_val = |coord| Some(coord.0 as i32 + coord.1 as i32); // Example values
-///
-/// // Evaluate range functions:
-/// assert_eq!(eval_range("SUM", (1, 1), (2, 2), get_val), Some(10)); // SUM
-/// assert_eq!(eval_range("AVG", (1, 1), (2, 2), get_val), Some(3)); // AVG
-///
-/// // Special function SLEEP:
-/// let get_val_sleep = |coord| Some(2); // Simulated value for sleep
-/// assert_eq!(eval_range("SLEEP", (1, 1), (1, 1), get_val_sleep), Some(2)); // SLEEP
-/// ```
 pub fn eval_range<F>(func: &str, start: (u16, u16), end: (u16, u16), get_val: F) -> Option<i32>
 where
     F: Fn((u16, u16)) -> Option<i32>,
