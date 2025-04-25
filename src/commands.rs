@@ -37,9 +37,7 @@ pub fn handle_commands(sheet: &mut Spreadsheet) {
         which_message = 0;
         let input_trimmed = input.trim_end();
 
-        if input_trimmed == "q" {
-            break;
-        }if input_trimmed == "Q" {
+        if input_trimmed == "q" || input_trimmed == "Q" {
             break;
         } else if input_trimmed == "disable_output" {
             output_enabled = false;

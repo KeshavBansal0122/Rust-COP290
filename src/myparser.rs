@@ -1,4 +1,5 @@
 pub struct MyParser;
+type RangeType<'a> = (&'a str, (u16, u16), (u16, u16));
 
 impl MyParser {
     pub fn cell_name_to_coord(s: &str) -> Option<(u16, u16)> {
@@ -46,7 +47,7 @@ impl MyParser {
     }
 
     /// Parses MAX(A1:B3), etc., returning (func, start, end).
-    pub fn parse_range(expr: &str) -> Option<(&str, (u16, u16), (u16, u16))> {
+    pub fn parse_range(expr: &str) -> Option<RangeType> {
         let expr = expr.trim();
         for &func in &["MIN", "MAX", "AVG", "SUM", "STDEV", "SLEEP"] {
             let open = format!("{}(", func);

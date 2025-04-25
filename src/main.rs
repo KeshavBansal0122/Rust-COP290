@@ -18,7 +18,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Otherwise expect two numeric args: rows and cols
         Some(rows_str) => {
             let cols_str = args.next()
-                .ok_or_else(|| "Usage: <ext1> | <rows> <cols>")?;
+                .ok_or("Usage: <ext1> | <rows> <cols>")?;
             let rows: usize = rows_str.parse()?;
             let cols: usize = cols_str.parse()?;
 

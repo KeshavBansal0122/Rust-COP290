@@ -27,6 +27,12 @@ pub struct SpreadsheetApp {
     last_search_position: Option<AbsCell>,
 }
 
+impl Default for SpreadsheetApp {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SpreadsheetApp {
     pub fn new() -> Self {
         let backend = EmbeddedBackend::new(999, 18278);
@@ -213,7 +219,7 @@ impl SpreadsheetApp {
     }
 
     fn handle_cell_edit(&mut self, new_value: &str) {
-        if new_value.starts_with('=') {
+        #[allow(clippy::manual_strip)] if new_value.starts_with('=') {
             match self.backend.set_cell_formula(self.selected_cell, &new_value[1..]) {
                 Ok(_) => self.status_message = "Formula updated".to_string(),
                 Err(err) => self.status_message = format!("Formula error: {:?}", err),
@@ -237,21 +243,21 @@ impl SpreadsheetApp {
         // self.refresh_viewport_cells();
     }
     fn move_view(&mut self, row_delta: i16, col_delta: i16) {
-        let new_row = self.view_top_left.row as i16 + row_delta;
-        let new_col = self.view_top_left.col as i16 + col_delta;
+        let new_row = self.view_top_left.row + row_delta;
+        let new_col = self.view_top_left.col + col_delta;
 
-        self.view_top_left.row = new_row.max(0).min(999 - self.display_rows) as i16;
-        self.view_top_left.col = new_col.max(0).min(18278 - self.display_cols) as i16;
+        self.view_top_left.row = new_row.max(0).min(999 - self.display_rows);
+        self.view_top_left.col = new_col.max(0).min(18278 - self.display_cols);
     }
 
     fn move_selection(&mut self, row_delta: i16, col_delta: i16) {
         // Calculate new position
-        let new_row = self.selected_cell.row as i16 + row_delta;
-        let new_col = self.selected_cell.col as i16 + col_delta;
+        let new_row = self.selected_cell.row + row_delta;
+        let new_col = self.selected_cell.col + col_delta;
 
         // Constrain to grid bounds
-        let new_row = new_row.max(0).min(998) as i16;
-        let new_col = new_col.max(0).min(18277) as i16;
+        let new_row = new_row.clamp(0, 998);
+        let new_col = new_col.clamp(0, 18277);
 
         self.selected_cell.row = new_row;
         self.selected_cell.col = new_col;
@@ -508,12 +514,12 @@ impl eframe::App for SpreadsheetApp {
 
                 // Also start inline editing if we detect text input
                 if ctx.input(|i| i.events.iter().any(|e| {
-                    if let egui::Event::Text(_) = e { true } else { false }
+                    matches!(e, egui::Event::Text(_))
                 })) {
                     self.start_inline_editing();
                     // Capture the first character typed
                     if let Some(egui::Event::Text(text)) = ctx.input(|i|
-                        i.events.iter().find(|e| if let egui::Event::Text(_) = e { true } else { false }).cloned()
+                        i.events.iter().find(|e| matches!(e, egui::Event::Text(_))).cloned()
                     ) {
                         self.inline_edit_value = text;
                     }

@@ -4,6 +4,8 @@ use std::collections::{HashMap, HashSet};
 use std::thread;
 use std::time::Duration;
 
+type ChildNormalType = (String, HashSet<(u16, u16)>);
+type ChildRangeType = (String, (u16, u16), (u16, u16));
 #[derive(Debug, Clone, PartialEq)]
 pub enum Cell {
     Value(i32),
@@ -31,8 +33,8 @@ pub struct Spreadsheet {
     pub rows: usize,
     pub cols: usize,
     pub parents_normal: HashMap<(u16, u16), HashSet<(u16, u16)>>,
-    pub child_normal: HashMap<(u16, u16), (String, HashSet<(u16, u16)>)>,
-    pub child_range: HashMap<(u16, u16), (String, (u16, u16), (u16, u16))>,
+    pub child_normal: HashMap<(u16, u16) , ChildNormalType>,
+    pub child_range: HashMap<(u16, u16), ChildRangeType>,
     pub cells: Vec<Vec<Cell>>,
 }
 
@@ -181,7 +183,7 @@ impl Spreadsheet {
                 '-' => 2,
                 '*' => 3,
                 '/' => 5,
-                _ => return 3, //// unrecognized cmd  invalid operator
+                _ => return 3, // unrecognized cmd  invalid operator
             };
 
             // Evaluate lhs
@@ -211,11 +213,7 @@ impl Spreadsheet {
                 }
             };
 
-            let new_cell = if op_code == 5 && b == Cell::Value(0) {
-                Cell::Err
-            }
-            //else if a or b is Err
-            else if a == Cell::Err || b == Cell::Err {
+            let new_cell = if op_code == 5 && b == Cell::Value(0) || a == Cell::Err || b == Cell::Err  {
                 Cell::Err
             }
             //else if both are values
@@ -387,7 +385,7 @@ impl Spreadsheet {
                 .insert(child_coord);
         }
 
-        return 3; // unrecognized cmd
+        3 // unrecognized cmd
     }
 
     /// Recompute all dependents of `start`.  If division-by-zero occurs in a child,
@@ -434,7 +432,7 @@ impl Spreadsheet {
         fn dfs(
             cell: (u16, u16),
             parents_normal: &HashMap<(u16, u16), HashSet<(u16, u16)>>,
-            child_range: &HashMap<(u16, u16), (String, (u16, u16), (u16, u16))>,
+            child_range: &HashMap<(u16, u16), ChildRangeType>,
             visited: &mut HashSet<(u16, u16)>,
             visiting: &mut HashSet<(u16, u16)>,
             topo_order: &mut Vec<(u16, u16)>,
@@ -628,47 +626,6 @@ impl Spreadsheet {
         // Simply check if there's a cycle reachable from the start cell
         self.is_cyclic(start_cell, &mut visited, &mut path)
     }
-    // Add this new function to detect cycles in the dependency graph
-    // pub fn has_cycle(&self) -> bool {
-    //     let mut visited = HashSet::new();
-    //     let mut path = HashSet::new();
-
-    //     // Create a vector to collect all cells we need to check
-    //     let mut cells_to_check = Vec::new();
-
-    //     // Add cells from parents_normal
-    //     cells_to_check.extend(self.parents_normal.keys().copied());
-
-    //     // Add cells from child_normal
-    //     cells_to_check.extend(self.child_normal.keys().copied());
-
-    //     // Add cells from range dependencies
-    //     for (&c, (_, start, end)) in &self.child_range {
-    //         cells_to_check.push(c);
-
-    //         // Also add all cells within each range
-    //         for col in start.0..=end.0 {
-    //             for row in start.1..=end.1 {
-    //                 cells_to_check.push((col, row));
-    //             }
-    //         }
-    //     }
-
-    //     // Remove duplicates
-    //     cells_to_check.sort();
-    //     cells_to_check.dedup();
-
-    //     // Check each cell for cycles
-    //     for cell in cells_to_check {
-    //         if !visited.contains(&cell) {
-    //             if self.is_cyclic(cell, &mut visited, &mut path) {
-    //                 return true;
-    //             }
-    //         }
-    //     }
-
-    //     false
-    // }
 
     // Helper function for cycle detection using DFS
     fn is_cyclic(

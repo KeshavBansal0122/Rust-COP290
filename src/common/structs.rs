@@ -71,7 +71,7 @@ impl FromStr for AbsCell {
         for (i, c) in s.chars().enumerate() {
             if c.is_ascii_alphabetic() {
                 let upper_c = c.to_ascii_uppercase();
-                if !(b'A'..=b'Z').contains(&(upper_c as u8)) {
+                if !upper_c.is_ascii_uppercase() {
                     return Err(format!("Invalid column letter: {}", c));
                 }
                 col = col * 26 + ((upper_c as u8 - b'A') as i16 + 1);

@@ -220,7 +220,7 @@ impl Storage {
         let cell_data = self.values.entry(cell).or_default();
         cell_data.formula = Some(expression);
         self.update_cells(cell);
-        return StorageError::None
+        StorageError::None
     }
     
     fn collect_referenced_cells(expression: &Expression, cell: AbsCell, referenced_cells: &mut HashSet<AbsCell>) {
