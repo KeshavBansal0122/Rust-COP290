@@ -1,6 +1,6 @@
 use crate::common::cell_value::CellValue;
 use crate::common::structs::AbsCell;
-use crate::embedded_backend::single_threaded::EmbeddedBackend;
+use crate::embedded_backend::simple::EmbeddedBackend;
 use egui::{Color32, FontId, Key, RichText, TextEdit};
 use rfd::FileDialog;
 use std::path::PathBuf;
@@ -878,11 +878,11 @@ impl eframe::App for SpreadsheetApp {
 
                                         // Draw cell background if selected
                                         if is_selected {
-                                            ui.painter().rect_filled(
-                                                rect,
-                                                0.0,
-                                                Color32::from_rgb(0, 0, 0), // Light blue background
-                                            );
+                                            // ui.painter().rect_filled(
+                                            //     rect,
+                                            //     0.0,
+                                            //     Color32::from_rgb(0, 0, 0), // Light blue background
+                                            // );
 
                                             // Border for selected cell
                                             ui.painter().rect_stroke(

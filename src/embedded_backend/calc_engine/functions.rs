@@ -1,7 +1,7 @@
 use crate::common::cell_value::{CellError, CellValue};
 use crate::common::expression::CellRange;
 use crate::common::structs::AbsCell;
-use crate::embedded_backend::storage::Storage;
+use crate::embedded_backend::table::Storage;
 
 pub fn max(storage: &Storage, cell: AbsCell, range: &CellRange) -> Result<f64, CellError> {
     let top_left = range.top_left.to_abs(cell);

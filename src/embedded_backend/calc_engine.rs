@@ -1,7 +1,7 @@
 use crate::common::cell_value::{CellError, CellValue};
 use crate::common::expression::{Expression, Operator, RangeFunction};
 use crate::common::structs::AbsCell;
-use crate::embedded_backend::storage::Storage;
+use crate::embedded_backend::table::Storage;
 use std::thread::sleep;
 use std::time::Duration;
 

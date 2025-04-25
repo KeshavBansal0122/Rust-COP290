@@ -1,0 +1,174 @@
+\documentclass[12pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{enumitem}
+\usepackage{url}
+
+\title{Rust Lab: Extended Spreadsheet program}
+\author{Keshav Bansal (2023MT10273) \\ Pramod Kumar Meena (2023CS51175) \\ Kavisivakumar (2023CS11130)}
+\date{}
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+
+\section{Introduction}
+This report describes a spreadsheet program written in Rust. The program allows users
+to create, edit, and manage spreadsheets using a command-line interface or a native gui interface when extensions are enabled. It supports basic spreadsheet operations such as entering recursive
+formulas, copying and pasting relative formulas, undo, redo, saving to file, exporting to CSV etc. The main goal of the extension is the user-friendly experience. 
+
+\section{Program Overview}
+The spreadsheet program is built in Rust, a programming language known for its safety
+and performance. The program is modular, with separate modules for different functionalities:
+\begin{itemize}
+\item \texttt{main.rs}: Handles program startup, user input, and integrate everything.
+\item \texttt{parser}: A pest generated parser for proven correctness that converts and validates expression input
+\item \texttt{frontend.rs}: Manages the terminal-based display of cells along with scroll features using wasd.
+\item \texttt{common}: Contains the common "grammar types" of the codebase - these allow the different parts of the codebase like the front and the backend to communicate
+\item \texttt{embedded\_backend}: Contains the backend which is responsible for storage and processing of the data.
+\end{itemize}
+
+The program supports two modes:
+\begin{itemize}
+\item \textbf{Standard Mode}: A command-line interface for basic spreadsheet operations.
+\item \textbf{Extension Mode}: Adds advanced features like undo-redo, relative copy-pasting, etc., and a native gui interface using the egui framework, which responds to the user's system settings and runs in the light or dark mode accordingly
+``--ext1'' flag (\texttt{./target/release/spreadsheet --ext1})
+\end{itemize}
+
+\section{Key Features}
+The program provides the following features:
+
+\subsection{Core Features} 
+\begin{itemize}
+\item \textbf{Command-line Interface Compatibility}: The application maintains full compatibility with previous versions, ensuring seamless autograder integration.
+\item \textbf{Comprehensive Spreadsheet Functionality}: Features robust support for cell references, mathematical operations, and a diverse range of formula types.
+\item \textbf{Intuitive Navigation}: Allows for easy movement between cells using the w/a/s/d key system.
+\item \textbf{Customizable Display Options}: Provides flexibility to enable or disable various output features according to user preferences.
+\item \textbf{Advanced Cell Operations}: Supports both direct value entry and formula implementation. Formula capabilities include arithmetic expressions (such as \texttt{A1+B1}) and statistical functions including \texttt{SUM}, \texttt{AVG}, \texttt{MIN}, \texttt{MAX}, and \texttt{STDEV}.
+\item \textbf{Intelligent Dependency Management}: Implements a sophisticated system that monitors cell relationships, automatically updates dependent cells when values change, and identifies circular references to prevent calculation errors.
+\item \textbf{Versatile Sheet Navigation}: Provides multiple navigation methods including keyboard shortcuts (w, a, s, d) for directional movement and the \texttt{ jump to} command for direct cell access.
+\end{itemize}
+
+\subsection{Extended Features}
+\begin{itemize}
+\item \textbf{Native gui Interface}: The extension mode includes a lightweight native gui interface to interact with the
+spreadsheet using the egui framework, responding to user's system preferences and setting light and dark modes accordingly.
+\item \textbf{String and empty Cell support}: The cells are now by default empty instead of having 0 as the default value, reducing clutter. Empty cells are considered intelligently in operations like AVG, not affecting the value. Strings are also supported in cells
+\item \textbf{Working set include floats}: In extension mode, the user can work with floating numbers apart from integers.
+\item \textbf{Relative Copy and Paste}: Users can copy a cell, and paste it while transforming the formula according to relative displacement. Absolute copy pasting is supporting my by copying the formula verbatim
+\item \textbf{Extended Formulas}: In extension mode, users can entry arbitrarily nested and complex formulas
+\item \textbf{Undo/Redo}: Extension mode supports undoing and redoing actions using standard shortcuts(\texttt{Ctrl+Z and Ctrl+Y})
+\item \textbf{File Save/Load and export}: In extension mode, users can save data and can load it too, preserving all the formulas. They can also export a view of the data as csv.
+\end{itemize}
+
+\section{Software Architecture}
+The program was built with foresight for performance and extensibility
+implementation details:
+
+\subsection{Main Data types}
+The more notable types and modules defined are:
+\begin{itemize}
+\item \textbf{RelCell and AbsCell}: implementing relative copy pasting made it necessary to distinguish and convert between the two. These being different structs instead of simple tuples greatly reduce the risk of one being used in place of other
+\item \textbf{CellData}: Stores the value or the error of the cell in an enum, and the formula as an AST. Storing this in result prevents accidentally using the value of an errored cell
+\item \textbf{Table}: Represents the spreadsheet, the storage of the CellData and the algorithms to interact the the sheet
+\end{itemize}
+
+\subsection{Data Structures}
+\begin{itemize}
+    \item \textbf{Value Storage}: The values are stored in an ordered map (a BTreeMap concretely). An ordered map was chosen to allow incremental searching through the table. It also allows for more efficient evaluation of range functions in a sparse table, because we directly query for a row, skipping the empty cells
+    \item \textbf{Dependents Storage}: The dependents of a particular cell are stored in a hashset. This allows for fast removal of elements when a cell is reassigned. This also directly manages duplicates caused by recursive functions
+    \item \textbf{Metadata Storage}: The metadata, i.e the correspondance between the dependent hashset and the cell are stored in a HashMap. This list is only ever required in a direct lookup, a HashMap with O(1) lookup becomes the ideal data structure 
+\end{itemize}
+
+\subsection{Formula Evaluation}
+The \texttt{calc\_engine.rs} file handles formula evaluation. Formulas can include:
+\begin{itemize}
+\item Arithmetic operations (e.g., \texttt{A1+B1*2}).
+\item Range functions (e.g., \texttt{SUM(A1:A5)}).
+\item Special functions like \texttt{SLEEP} for pausing execution.
+\end{itemize}
+
+The program parses formulas, resolves cell references, and evaluates expressions. It also
+checks for errors like division by zero or invalid references.
+
+\section{Approaches for Encapsulation}
+The program uses encapsulation to manage complexity and ensure data integrity through
+Rust's features:
+\begin{itemize}
+\item \textbf{Module System}: Encapsulate implementation details by using private fields in public structs. 
+\item  \textbf{Access Control}: Expose only the intended API surface through 'pub' methods: keep helpers private. 
+\item  \textbf{Type System}: Leverage strong typing and enums to enforce valid state transitions at compile time.
+\end{itemize}
+
+These techniques keep components isolated, improve maintainability, and reduce errors.
+
+\section{Interfaces Between Software Modules}
+
+\begin{itemize}
+\item \textbf{table.rs} This struct represents a single sheet and all the related calculations. This can be considered the core of the program.
+
+This is not used directly by the frontend. Wrappers can build around this for additional functionality. It allows setting and getting individual values of cells while maintaining inner consistency. It also supports searching directly, and can provide iterators over a range of values.
+
+The iterators and getters are used to interface with calc\_engine.rs
+
+\item \textbf{simple.rs}: This is the simplest possible useful wrapper around sheet.rs. This acts like a glue code between frontend and the backend, while providing additional functionality of undo and redo
+
+\item \textbf{common module}: This contains the grammar types which are used by the complete codebase for communication, like CellValue, AbsCell, etc. This serves as the link between everything
+
+
+\section{Extensions and Future Work}
+In addition to the proposed extensions for the Rust lab, we could also implement the following extensions easily under the current architecture:
+\begin{itemize}
+\item \textbf{Support for collaboration}: A wrapper can be build around the table.rs to allow collaboration support. The user action can be modeled as changing a cell value, This User Action can be communicated over the internet, with a synchronized timestamp. This allows even large changes in the table to transmitted efficiently over the internet
+\item \textbf{Multiple Sheets in a workbook}: This is basically a free feature just waiting for UI support. Multiple Sheet wrappers like simple.rs can be created in a single workbook which can function independently of each other, easily giving the multiple sheets
+\item \textbf{Extrapolation}: We can allow the user to extend a series. The pattern can be detected according to some fixed pattern, or a best line fit if not fixed pattern matches
+
+
+\end{itemize}
+
+\section{Why This Design is Effective}
+The program's design is effective for the following reasons:
+\begin{itemize}
+\item \textbf{Modularity}: The clear separation of concerns across modules  simplifies maintenance and feature
+additions.
+\item \textbf{Extensibility}: In the above section, we have explained how new features can be added without need of much refractoring or redesigning the architecture. This proves it extensible and future proof
+\item \textbf{Encapsulation}: Encapsulated data and interfaces (e.g., \texttt{Cell} structs, public functions) prevent unintended modifications, enhancing reliability.
+\item \textbf{Rust's Safety}: Rust's ownership and type system ensure safe data access and thread-safe operations, reducing runtime errors in both command-line and web
+modes.
+\end{itemize}
+
+\section{Modifications in Design During Implementation}
+
+\begin{itemize}
+\item \textbf{Value Storage}: Initially, in C lab, a pre-initialized 2d array was used for value storage. We realized that most spreadsheets are very sparse compared to their full size and thus this is very wasteful. The current ordered map structure is expected to perform better in both memory and time in real life loads
+\item \textbf{Formula Storage}:Formulas are now stored as recursive AST to allow more flexibility of user input
+\item \textbf{History Storage}:Storing the history stack of valid commands \end{itemize}
+
+These changes enhanced performance and scalability for dependency checks and other
+operations.
+
+\section{Which proposed extensions were not implemented}
+All the failures of implementing extensions can be tracked down to one single infuriating source: the gui.
+
+None of the team had experience is implementing a gui, furthermore, poor communication lead to difficulty integrating the back and the web based frontend, causing the need to develop a simpler UI in egui
+
+The lacking features were: charts, fully functioning searching, collaboration
+Failure of the web based gui threw a wrench in implementing collaboration and made showing the flexibility of the backend much more difficult. It also siphoned up valuable time which could've better utilized implementing more intellectually simulating features
+
+
+\section{Conclusion}
+The Rust spreadsheet program is a robust and feature-rich application for managing
+spreadsheets. Its modular design makes it easy to maintain and extend. The program
+efficiently handles cell dependencies, formula evaluation, and user commands while providing advanced features like multi-select operations, extrapolation and common keyboard operations.
+Future improvements could include support for collaboration work, additional interpolation
+functions, and graph using rust libraries.
+
+\section{References}
+\section{Project link}
+\subsection{Github Repository}
+\url{https://github.com/KeshavBansal0122/rust-COP290}
+
+\end{document}

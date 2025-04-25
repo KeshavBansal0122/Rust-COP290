@@ -4,8 +4,8 @@
 //! The exceptions are the features that are unrelated to the backend, like undo and redo
 use crate::common::cell_value::{CellData, CellError, CellValue};
 use crate::common::structs::AbsCell;
-use crate::embedded_backend::storage::{Storage, StorageError};
 use crate::embedded_backend::structs::{Action, CellInput};
+use crate::embedded_backend::table::{Storage, StorageError};
 use crate::parser::formula_parser::FormulaParser;
 use std::fs::File;
 use std::io;
