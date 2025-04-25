@@ -43,3 +43,12 @@ docs:
 	  echo "Cannot find HTML docs; did 'cargo doc' run successfully?"; \
 	  exit 1; \
 	fi
+	
+report: report.pdf
+
+report.pdf: main.tex
+	pdflatex main.tex
+	pdflatex main.tex  # Run twice for references
+
+clean-report:
+	rm -f report.aux report.log report.out report.pdf
