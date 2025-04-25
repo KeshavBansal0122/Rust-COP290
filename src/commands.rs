@@ -274,6 +274,34 @@ mod tests {
     }
 
     #[test]
+    fn test_cell_assignment() {
+        let mut handler = CommandHandler::new();
+        let mut sheet = Spreadsheet::new(10, 10);
+        
+        let result = handler.handle_command("", &mut sheet);
+        assert!(matches!(result, CommandResult::Ok));
+
+        // Valid cell assignment
+        let result = handler.handle_command("A1=42", &mut sheet);
+        assert!(matches!(result, CommandResult::Ok));
+
+        // Invalid cell reference
+        let result = handler.handle_command("Z99=42", &mut sheet);
+        assert!(matches!(result, CommandResult::InvalidCell));
+
+        // Invalid formula
+        let result = handler.handle_command("A2=invalid", &mut sheet);
+        assert!(matches!(result, CommandResult::UnrecognizedCommand));
+
+        // Formula that references other cells
+        let _ = handler.handle_command("A2=A1", &mut sheet);
+
+        // Circular reference
+        let result = handler.handle_command("A1=A2", &mut sheet);
+        assert!(matches!(result, CommandResult::CircularDependency));
+    }
+
+    #[test]
     fn test_output_toggle_commands() {
         let mut handler = CommandHandler::new();
         let mut sheet = Spreadsheet::new(10, 10);

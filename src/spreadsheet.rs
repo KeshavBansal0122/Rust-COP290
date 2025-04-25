@@ -601,25 +601,32 @@ impl Spreadsheet {
         }
     }
 
-    /// Print a window of the sheet
-    pub fn display(&self, start_row: usize, start_col: usize, max_rows: usize, max_cols: usize) {
-        print!("    ");
+    pub fn display_to<W: std::io::Write>(&self, writer: &mut W, start_row: usize, start_col: usize, max_rows: usize, max_cols: usize) -> std::io::Result<()> {
+        write!(writer, "    ")?;
         for c in (start_col + 1)..=(start_col + max_cols).min(self.cols) {
-            print!("{:>8}", col_to_letter(c));
+            write!(writer, "{:>8}", col_to_letter(c))?;
         }
-        println!();
+        writeln!(writer)?;
 
         for r in (start_row + 1)..=(start_row + max_rows).min(self.rows) {
-            print!("{:>3} ", r);
+            write!(writer, "{:>3} ", r)?;
             for c in (start_col + 1)..=(start_col + max_cols).min(self.cols) {
                 match &self.cells[r][c] {
-                    Cell::Value(v) => print!("{:>8}", v),
-                    Cell::Err => print!("{:>8}", "ERR"),
+                    Cell::Value(v) => write!(writer, "{:>8}", v)?,
+                    Cell::Err => write!(writer, "{:>8}", "ERR")?,
                 }
             }
-            println!();
+            writeln!(writer)?;
         }
+        Ok(())
     }
+
+    // Keep the original display function for backward compatibility
+    pub fn display(&self, start_row: usize, start_col: usize, max_rows: usize, max_cols: usize) {
+        self.display_to(&mut std::io::stdout(), start_row, start_col, max_rows, max_cols)
+            .expect("Failed to write to stdout");
+    }
+    
     pub fn has_cycle_from(&self, start_cell: (u16, u16)) -> bool {
         let mut visited = HashSet::new();
         let mut path = HashSet::new();
@@ -839,17 +846,17 @@ mod tests {
         let mut sheet = Spreadsheet::new(10, 10);
 
         // Set a literal sleep time (0 to avoid actually sleeping in tests)
-        let result = sheet.set_cell((1, 1), "SLEEP(0)");
+        let result = sheet.set_cell((1, 1), "SLEEP(-1)");
         assert_eq!(result, 0); // Success
-        assert_eq!(sheet.get_val((1, 1)), Some(0));
+        assert_eq!(sheet.get_val((1, 1)), Some(-1));
 
         // Set a cell with a value
-        sheet.set_cell((2, 2), "5");
+        sheet.set_cell((2, 2), "1");
 
         // Set a sleep with cell reference
         let result = sheet.set_cell((3, 3), "SLEEP(B2)");
         assert_eq!(result, 0); // Success
-        assert_eq!(sheet.get_val((3, 3)), Some(5));
+        assert_eq!(sheet.get_val((3, 3)), Some(1));
 
         // Test with invalid range in SLEEP
         let result = sheet.set_cell((4, 4), "SLEEP(A1:B2)");
@@ -1020,4 +1027,154 @@ mod tests {
         // Test with reversed range coordinates
         assert!(is_within_range((2, 2), (3, 3), (1, 1)));
     }
+}
+
+#[test]
+fn test_sleep_function_with_cell_reference_error() {
+    let mut sheet = Spreadsheet::new(10, 10);
+
+    // Set a cell that will be Err
+    sheet.set_cell((1, 1), "10/0");
+    assert_eq!(sheet.get_val((1, 1)), None); // Should be Err
+
+    // Test SLEEP with reference to an Err cell
+    let result = sheet.set_cell((2, 2), "SLEEP(A1)");
+    assert_eq!(result, 0); // Should succeed but result in Err
+    assert_eq!(sheet.get_val((2, 2)), None); // Should be Err
+
+    // Test with invalid cell reference
+    let result = sheet.set_cell((3, 3), "SLEEP(Z99)"); // Out of bounds reference
+    assert_eq!(result, 0);
+    assert_eq!(sheet.get_val((3, 3)), None); // Should be Err
+}
+
+#[test]
+fn test_binary_operations_with_errors() {
+    let mut sheet = Spreadsheet::new(10, 10);
+
+    // Set a cell with Err
+    sheet.set_cell((1, 1), "10/0");
+
+    // Test binary operation with an Err cell
+    let result = sheet.set_cell((2, 2), "A1+5");
+    assert_eq!(result, 0);
+    assert_eq!(sheet.get_val((2, 2)), None); // Should be Err
+
+    // Test with two Err cells
+    sheet.set_cell((3, 3), "10/0");
+    let result = sheet.set_cell((4, 4), "A1+C3");
+    assert_eq!(result, 0);
+    assert_eq!(sheet.get_val((4, 4)), None); // Should be Err
+
+    // Test with invalid cell reference
+    let result = sheet.set_cell((5, 5), "Z99+5");
+    assert_eq!(result, 0);
+    assert_eq!(sheet.get_val((5, 5)), None); // Should be Err due to invalid reference
+}
+
+#[test]
+fn test_binary_operations_parsable_expressions() {
+    let mut sheet = Spreadsheet::new(10, 10);
+
+    // Test with invalid left-hand side
+    let result = sheet.set_cell((1, 1), "abc+5");
+    assert_eq!(result, 3); // Should return unrecognized command
+
+    // Test with invalid right-hand side
+    let result = sheet.set_cell((2, 2), "5+xyz");
+    assert_eq!(result, 3); // Should return unrecognized command
+
+    // Test with invalid operator
+    let result = sheet.set_cell((3, 3), "5%10");
+    assert_eq!(result, 3); // Should return unrecognized command
+}
+
+
+#[test]
+fn test_formula_cycle_detection_with_sleep() {
+    let mut sheet = Spreadsheet::new(10, 10);
+
+    // Setup reference chain with sleep
+    sheet.set_cell((1, 1), "5");
+    sheet.set_cell((2, 2), "SLEEP(A1)");
+
+    // Try to create a cycle
+    let result = sheet.set_cell((1, 1), "B2");
+    assert_eq!(result, 4); // Should detect cycle
+    assert_eq!(sheet.get_val((1, 1)), Some(5)); // Should retain original value
+}
+
+#[test]
+fn test_recalculation_with_sleep() {
+    let mut sheet = Spreadsheet::new(10, 10);
+
+    // Setup chain with sleep
+    sheet.set_cell((1, 1), "1");
+    sheet.set_cell((2, 2), "SLEEP(A1)");
+    sheet.set_cell((3, 3), "B2+1");
+
+    // Initial values
+    assert_eq!(sheet.get_val((1, 1)), Some(1));
+    assert_eq!(sheet.get_val((2, 2)), Some(1));
+    assert_eq!(sheet.get_val((3, 3)), Some(2));
+
+    // Change the sleep time
+    sheet.set_cell((1, 1), "0"); // Set to 0 to avoid actual sleeping in tests
+
+    // Check recalculation
+    assert_eq!(sheet.get_val((1, 1)), Some(0));
+    assert_eq!(sheet.get_val((2, 2)), Some(0));
+    assert_eq!(sheet.get_val((3, 3)), Some(1));
+}
+
+#[test]
+fn test_multiple_binary_operation_chains() {
+    let mut sheet = Spreadsheet::new(10, 10);
+
+    // Setup complex calculation chain
+    sheet.set_cell((1, 1), "10");
+    sheet.set_cell((2, 2), "A1*2");  // B2 = 20
+    sheet.set_cell((3, 3), "B2-5");  // C3 = 15
+    sheet.set_cell((4, 4), "C3/3");  // D4 = 5
+    sheet.set_cell((5, 5), "D4+A1"); // E5 = 15
+
+    // Check initial values
+    assert_eq!(sheet.get_val((2, 2)), Some(20));
+    assert_eq!(sheet.get_val((3, 3)), Some(15));
+    assert_eq!(sheet.get_val((4, 4)), Some(5));
+    assert_eq!(sheet.get_val((5, 5)), Some(15));
+
+    // Change base value and check recalculation
+    sheet.set_cell((1, 1), "20");
+
+    assert_eq!(sheet.get_val((1, 1)), Some(20));
+    assert_eq!(sheet.get_val((2, 2)), Some(40));  // B2 = 20*2 = 40
+    assert_eq!(sheet.get_val((3, 3)), Some(35));  // C3 = 40-5 = 35
+    assert_eq!(sheet.get_val((4, 4)), Some(11));  // D4 = 35/3 = 11 (integer division)
+    assert_eq!(sheet.get_val((5, 5)), Some(31));  // E5 = 11+20 = 31
+}
+
+#[test]
+fn test_display_function() {
+    let mut sheet = Spreadsheet::new(5, 5);
+
+    // Populate with test data
+    sheet.set_cell((1, 1), "10");    // A1
+    sheet.set_cell((2, 2), "20");    // B2
+    sheet.set_cell((3, 3), "30");    // C3
+    sheet.set_cell((4, 4), "A1/0");  // D4 (Error)
+    sheet.set_cell((5, 5), "50");    // E5
+
+    // Capture output in a string buffer
+    let mut output = Vec::new();
+    sheet.display_to(&mut output, 0, 0, 5, 5).unwrap();
+    let output_str = String::from_utf8(output).unwrap();
+
+    // Verify expected content
+    assert!(output_str.contains("A"));
+    assert!(output_str.contains("B"));
+    assert!(output_str.contains("10"));
+    assert!(output_str.contains("20"));
+    assert!(output_str.contains("ERR"));
+    assert!(output_str.contains("50"));
 }
