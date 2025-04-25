@@ -29,7 +29,7 @@ test:
 
 # Code‐coverage (Tarpaulin)
 coverage:
-	cargo tarpaulin --skip-clean --include-files src\commands.rs src\function.rs src\myparser.rs src\spreadsheet.rs --out Html
+	cargo tarpaulin --skip-clean --include-files src/commands.rs src/function.rs src/myparser.rs src/spreadsheet.rs --out Html
 
 # Generate HTML docs + PDF
 docs:
