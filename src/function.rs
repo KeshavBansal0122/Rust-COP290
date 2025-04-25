@@ -1,8 +1,30 @@
 use std::thread;
 use std::time::Duration;
 
-/// Evaluate a simple binary operation.  
-/// Returns `Some(result)` or `None` if the operator is invalid or if division by zero is attempted.
+/// Evaluate a simple binary operation.
+///
+/// This function performs arithmetic operations based on the operator code provided:
+/// - `1` for addition.
+/// - `2` for subtraction.
+/// - `3` for multiplication.
+/// - `5` for division.
+///
+/// # Arguments
+/// * `op` - An integer representing the operation to perform (1, 2, 3, or 5).
+/// * `a` - The left operand.
+/// * `b` - The right operand.
+///
+/// # Returns
+/// * `Some(result)` - The result of the operation if valid.
+/// * `None` - If the operator is invalid or division by zero is attempted.
+///
+/// # Examples
+/// ```rust
+/// use embedded::function::eval_binary;
+/// assert_eq!(eval_binary(1, 5, 3), Some(8)); // 5 + 3
+/// assert_eq!(eval_binary(5, 6, 0), None);    // Division by zero
+/// assert_eq!(eval_binary(9, 4, 2), None);    // Invalid operator
+/// ```
 pub fn eval_binary(op: i8, a: i32, b: i32) -> Option<i32> {
     match op {
         1 => Some(a + b),
@@ -20,7 +42,25 @@ pub fn eval_binary(op: i8, a: i32, b: i32) -> Option<i32> {
 }
 
 /// Calculate the minimum value in the specified range.
-/// Returns `None` if any cell is in an error state.
+///
+/// This function iterates over a rectangular range of cells and determines the smallest value.
+/// Returns `None` if any cell in the range is in an error state.
+///
+/// # Arguments
+/// * `start` - The top-left corner of the range as `(column, row)`.
+/// * `end` - The bottom-right corner of the range as `(column, row)`.
+/// * `get_val` - A callback function that returns `Some(value)` or `None` for each cell.
+///
+/// # Returns
+/// * `Some(min_value)` - The smallest value in the range.
+/// * `None` - If any cell in the range signals an error.
+///
+/// # Examples
+/// ```rust
+/// use embedded::function::min_range;
+/// let get_val = |coord| Some(coord.0 as i32 + coord.1 as i32); // Example values
+/// assert_eq!(min_range((1, 1), (2, 2), get_val), Some(2)); // Minimum value
+/// ```
 pub fn min_range<F>(start: (u16, u16), end: (u16, u16), get_val: F) -> Option<i32>
 where
     F: Fn((u16, u16)) -> Option<i32>,
@@ -38,7 +78,23 @@ where
 }
 
 /// Calculate the maximum value in the specified range.
-/// Returns `None` if any cell is in an error state.
+///
+/// This function iterates over a rectangular range of cells and determines the largest value.
+/// Returns `None` if any cell in the range is in an error state.
+///
+/// # Arguments
+/// Same as `min_range`.
+///
+/// # Returns
+/// * `Some(max_value)` - The largest value in the range.
+/// * `None` - If any cell in the range signals an error.
+///
+/// # Examples
+/// ```rust
+/// use embedded::function::max_range;
+/// let get_val = |coord| Some(coord.0 as i32 + coord.1 as i32); // Example values
+/// assert_eq!(max_range((1, 1), (2, 2), get_val), Some(4)); // Maximum value
+/// ```
 pub fn max_range<F>(start: (u16, u16), end: (u16, u16), get_val: F) -> Option<i32>
 where
     F: Fn((u16, u16)) -> Option<i32>,
@@ -56,7 +112,23 @@ where
 }
 
 /// Calculate the average (rounded down) of values in the specified range.
+///
+/// Computes the arithmetic mean of all values in the range.
 /// Returns `None` if any cell is in an error state, or `Some(0)` if the range is empty.
+///
+/// # Arguments
+/// Same as `min_range`.
+///
+/// # Returns
+/// * `Some(average)` - The average of all values in the range.
+/// * `None` - If any cell in the range signals an error.
+///
+/// # Examples
+/// ```rust
+/// use embedded::function::avg_range;
+/// let get_val = |coord| Some(coord.0 as i32 + coord.1 as i32); // Example values
+/// assert_eq!(avg_range((1, 1), (2, 2), get_val), Some(3)); // Average value
+/// ```
 pub fn avg_range<F>(start: (u16, u16), end: (u16, u16), get_val: F) -> Option<i32>
 where
     F: Fn((u16, u16)) -> Option<i32>,
@@ -78,7 +150,23 @@ where
 }
 
 /// Calculate the sum of values in the specified range.
-/// Returns `None` if any cell is in an error state.
+///
+/// This function iterates over a rectangular range of cells and computes the total sum.
+/// Returns `None` if any cell in the range is in an error state.
+///
+/// # Arguments
+/// Same as `min_range`.
+///
+/// # Returns
+/// * `Some(sum)` - The total sum of all values in the range.
+/// * `None` - If any cell in the range signals an error.
+///
+/// # Examples
+/// ```rust
+/// use embedded::function::sum_range;
+/// let get_val = |coord| Some(coord.0 as i32 + coord.1 as i32); // Example values
+/// assert_eq!(sum_range((1, 1), (2, 2), get_val), Some(10)); // Total sum
+/// ```
 pub fn sum_range<F>(start: (u16, u16), end: (u16, u16), get_val: F) -> Option<i32>
 where
     F: Fn((u16, u16)) -> Option<i32>,
@@ -94,7 +182,27 @@ where
 }
 
 /// Calculate the standard deviation (rounded) of values in the specified range.
-/// Returns `None` if any cell is in an error state, or `Some(0)` if fewer than 2 cells.
+///
+/// This function computes the population standard deviation for the values in the specified range.
+/// The result is rounded to the nearest integer. Returns `None` if any cell is in an error state or
+/// if fewer than two valid cells are present.
+///
+/// # Arguments
+/// * `start` - The top-left corner of the range as `(column, row)`.
+/// * `end` - The bottom-right corner of the range as `(column, row)`.
+/// * `get_val` - A callback function that returns `Some(value)` or `None` for each cell.
+///
+/// # Returns
+/// * `Some(stdev)` - The standard deviation of the values in the range.
+/// * `None` - If any cell in the range signals an error or fewer than two valid cells exist.
+///
+/// # Examples
+/// ```rust
+/// use embedded::function::stdev_range;
+/// let get_val = |coord| Some(coord.0 as i32 + coord.1 as i32); // Example values
+/// assert_eq!(stdev_range((1, 1), (2, 2), get_val), Some(0)); // Small range
+/// assert_eq!(stdev_range((1, 1), (3, 3), get_val), Some(1)); // Larger range
+/// ```
 pub fn stdev_range<F>(start: (u16, u16), end: (u16, u16), get_val: F) -> Option<i32>
 where
     F: Fn((u16, u16)) -> Option<i32>,
@@ -128,8 +236,42 @@ where
 }
 
 /// Evaluate a range function (MIN/MAX/AVG/SUM/STDEV/SLEEP).
-/// The callback returns `Some(value)` for each cell, or `None` to signal an error.
-/// Returns `Some(aggregate)` or `None`.
+///
+/// This function dispatches the specified range function (`func`) to the appropriate helper
+/// method for evaluation. It supports standard aggregate functions (e.g., `MIN`, `MAX`) as well
+/// as the special `SLEEP` function.
+///
+/// # Arguments
+/// * `func` - A string representing the function name (e.g., `"SUM"` or `"SLEEP"`).
+/// * `start` - The top-left corner of the range as `(column, row)`.
+/// * `end` - The bottom-right corner of the range as `(column, row)`.
+/// * `get_val` - A callback function that returns `Some(value)` or `None` for each cell.
+///
+/// # Returns
+/// * `Some(result)` - The result of the range function.
+/// * `None` - If the function name is invalid or any cell in the range signals an error.
+///
+/// # Supported Functions
+/// - `"MIN"`: Calculates the minimum value in the range.
+/// - `"MAX"`: Calculates the maximum value in the range.
+/// - `"AVG"`: Calculates the average value in the range.
+/// - `"SUM"`: Calculates the total sum of values in the range.
+/// - `"STDEV"`: Calculates the standard deviation of values in the range.
+/// - `"SLEEP"`: Delays execution for a specified number of seconds (the value of the first cell).
+///
+/// # Examples
+/// ```rust
+/// use embedded::function::eval_range;
+/// let get_val = |coord| Some(coord.0 as i32 + coord.1 as i32); // Example values
+///
+/// // Evaluate range functions:
+/// assert_eq!(eval_range("SUM", (1, 1), (2, 2), get_val), Some(10)); // SUM
+/// assert_eq!(eval_range("AVG", (1, 1), (2, 2), get_val), Some(3)); // AVG
+///
+/// // Special function SLEEP:
+/// let get_val_sleep = |coord| Some(2); // Simulated value for sleep
+/// assert_eq!(eval_range("SLEEP", (1, 1), (1, 1), get_val_sleep), Some(2)); // SLEEP
+/// ```
 pub fn eval_range<F>(func: &str, start: (u16, u16), end: (u16, u16), get_val: F) -> Option<i32>
 where
     F: Fn((u16, u16)) -> Option<i32>,

@@ -1,3 +1,10 @@
+//! This module is the implementation of the backend for the spreadsheet.
+//! This has evolved beyond the storage, this also contains all the logic for
+//! interacting with the spreadsheet.
+//!
+//! Each storage is a separate spreadsheet, multiple storages can be created
+//! and used independently.
+
 use crate::common::cell_data::CellMetadata;
 use crate::common::cell_value::{CellData, CellError, CellValue};
 use crate::common::expression::Expression;
@@ -10,6 +17,16 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::File;
 use std::io::{self};
 
+/// The storage internally uses a BTreeMap to store the cell values and
+/// a HashMap to store the cell dependencies.
+/// The BTreeMap allows for efficient range queries and the HashMap allows for
+/// efficient dependency tracking.
+///
+/// Using a BTreeMap allows to return a range iterator which can skip all the empty cells.
+/// This greatly improves performance when dealing with sparse data.
+/// Also allows incremental searching for a string in the cells. The order the search is done
+/// is left to right, top to bottom. This is the same order as the user would expect
+/// when searching for a string in a spreadsheet.
 #[derive(Debug, Default, Serialize, Deserialize, Clone)]
 pub struct Storage {
     rows: u16,
@@ -21,6 +38,8 @@ pub struct Storage {
 static EMPTY_HASHSET: once_cell::sync::Lazy<HashSet<AbsCell>> =
     once_cell::sync::Lazy::new(HashSet::new);
 
+/// Error types that can occur during set operations.
+/// The storage can reject a formula if it causes a circular dependency or contains an out of bounds cell.
 pub enum StorageError {
     CircularDependency,
     InvalidCell,
@@ -41,6 +60,8 @@ impl Storage {
         x.unwrap_or(&Ok(CellValue::Empty))
     }
 
+    /// Returns the formula of the cell if it exists, otherwise returns None
+    /// This string is not cached, it is generated on the fly from the expression
     pub fn get_cell_formula(&self, cell: AbsCell) -> Option<String> {
         let x = self.values.get(&cell)?;
         let x = x.formula.as_ref()?;
@@ -82,6 +103,16 @@ impl Storage {
         SparseRangeIter::new(top_left, bottom_right, &self.values)
     }
 
+    /// Gives a full iterator over a closed rectangle of cells. Returns all the cells, even if they are empty.
+    /// Useful when need to display a range of cells
+    ///
+    /// # Arguments
+    ///
+    /// * `top_left`: top left of the rectangle
+    /// * `bottom_right`: bottom right of the rectangle
+    ///
+    /// returns: The iterator over the cells in range.
+    /// empty if bottom_right.row and col >= top_left.row and col not satisfied
     pub fn get_value_range_full(
         &self,
         top_left: AbsCell,
@@ -97,6 +128,8 @@ impl Storage {
             .unwrap_or(&EMPTY_HASHSET)
     }
 
+    /// Simply recalculates the value of the cell, if it has a formula.
+    /// This does not update the dependants of the cell, only the value of the cell itself.
     fn recalculate_cell(&mut self, cell: AbsCell) {
         let exp = self.values.get(&cell);
         if let Some(exp) = exp {
@@ -289,6 +322,9 @@ impl Storage {
         }
     }
 
+    /// Copies the cell expression from one cell to another.
+    /// This is a relative copy, and might be rejected if the expression goes out of bounds
+    /// with respect to the new cell.
     pub fn copy_cell_expression(&mut self, from: AbsCell, to: AbsCell) -> StorageError {
         let cell_data = self.values.get(&from);
         match cell_data {
@@ -338,9 +374,14 @@ impl Storage {
         bincode::deserialize_from(reader).map_err(|e| io::Error::new(io::ErrorKind::Other, e))
     }
 
+    /// Searches for a string in the storage starting from the top-left cell (0, 0).
+    /// The search is done in a left-to-right, top-to-bottom order.
     pub fn search_from_start(&self, to_search: &str) -> Option<AbsCell> {
         self.search(AbsCell::new(0, -1), to_search)
     }
+
+    /// Searches for a string in the storage starting from, and excluding the given cell.
+    /// The search is done in a left-to-right, top-to-bottom order.
     pub fn search(&self, start: AbsCell, to_search: &str) -> Option<AbsCell> {
         let next_cell = {
             if start.col >= (self.cols - 1) as i16 {

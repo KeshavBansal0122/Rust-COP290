@@ -168,6 +168,43 @@ impl CommandHandler {
     }
 }
 
+/// Handles user commands for interacting with the spreadsheet.
+///
+/// This function provides an interactive terminal-based interface, allowing users
+/// to manipulate and navigate a spreadsheet. It supports commands for navigation,
+/// modifying cells, enabling/disabling output, and more.
+///
+/// # Arguments
+/// * `sheet` - A mutable reference to the `Spreadsheet` object.
+///
+/// # Commands
+/// - `q` or `Q`: Quit the command interface.
+/// - `disable_output`: Disable spreadsheet display updates.
+/// - `enable_output`: Enable spreadsheet display updates.
+/// - `scroll_to <cell>`: Scroll to a specific cell (e.g., `scroll_to A1`).
+/// - `w`, `a`, `s`, `d`: Navigate the spreadsheet's viewport (up, left, down, right).
+/// - `<cell>=<expression>`: Set a cell's value or formula (e.g., `A1=5+3`).
+///
+/// # Behavior
+/// - Displays the spreadsheet's current state in a 10x10 viewport.
+/// - Handles viewport boundaries and ensures safe scrolling.
+/// - Provides status messages for the last command's result (e.g., "ok", "Invalid cell").
+///
+/// # Notes
+/// - Errors such as invalid cells, circular dependencies, or division by zero are reported
+///   via status messages.
+/// - The viewport and cell coordinates are zero-indexed internally but support user-friendly
+///   one-indexed labels through `MyParser`.
+///
+/// # Example
+/// ```rust
+/// use embedded::commands::handle_commands;
+/// use crate::embedded::myparser::MyParser;
+/// use crate::embedded::spreadsheet::Spreadsheet;
+///
+/// let mut sheet = Spreadsheet::new(20, 20);
+/// handle_commands(&mut sheet);
+/// ```
 pub fn handle_commands(sheet: &mut Spreadsheet) {
     let stdin = io::stdin();
     let mut stdout = io::stdout();

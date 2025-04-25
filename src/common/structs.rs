@@ -1,3 +1,15 @@
+//! This module contains the implementation of the common grammar of the spreadsheet -
+//! The cells are of two types - Absolute and Relative.
+//!
+//! The Relative and Absolute Cells are different structs to allow easy
+//! implementation of relative formula copying, a feature much more useful than absolute formula
+//! copying and the default in popular spreadsheet software like Excel.
+//!
+//! All the formulas in the spreadsheet are stored as relative cells, and then converted to absolute cells
+//! at the time of evaluation.
+//!
+//! These being different structs makes a conversion mistake impossible, as the structs are not interchangeable.
+
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fmt::Display;
@@ -19,11 +31,17 @@ pub struct RelCell {
     pub col: i16,
 }
 
+/// Represents a cell in a spreadsheet using absolute coordinates.
+/// Stored as 0-indexed, but displayed as 1-indexed.
+/// Prefer using `AbsCell::FromStr` to create an `AbsCell` from a string instead of manually creating the instance.
 impl AbsCell {
     pub const fn new(row: i16, col: i16) -> Self {
         AbsCell { row, col }
     }
 
+    /// Creates a new `AbsCell` from a `RelCell` and an `AbsCell` origin.
+    /// This is useful for converting relative cell references to absolute ones
+    /// during evaluation.
     pub fn from_rel(target: RelCell, origin: AbsCell) -> Self {
         AbsCell {
             row: origin.row + target.row,
@@ -38,6 +56,9 @@ impl AbsCell {
         }
     }
 
+    /// Converts an `AbsCell` to a `RelCell` using the given origin.
+    /// This is useful for converting absolute cell references to relative ones
+    /// during parsing the formula.
     pub fn to_rel(&self, origin: AbsCell) -> RelCell {
         RelCell {
             row: self.row - origin.row,
@@ -47,6 +68,7 @@ impl AbsCell {
 }
 
 impl Display for AbsCell {
+    /// Converts the `AbsCell` to a string representation in spreadsheet format (e.g., "A1", "B2").
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Convert col number (0-indexed) into letters
         let mut col = self.col as usize;
@@ -67,6 +89,9 @@ impl Display for AbsCell {
 impl FromStr for AbsCell {
     type Err = String;
 
+    /// Parses a string representation of a cell (e.g., "A1", "B2") into an `AbsCell`.
+    /// The interpretation is 0 based, so "A1" is (0, 0) and "B2" is (1, 1).
+    /// Returns an error if the string is not a valid cell reference.
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let mut col = 0i16;
         let mut row_part = String::new();

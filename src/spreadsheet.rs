@@ -4,8 +4,28 @@ use std::collections::{HashMap, HashSet};
 use std::thread;
 use std::time::Duration;
 
+/// Represents a type alias for normal child dependencies.
+///
+/// This type contains:
+/// * A string identifier.
+/// * A set of cell coordinates representing dependencies (child cells).
 type ChildNormalType = (String, HashSet<(u16, u16)>);
+
+/// Represents a type alias for range-based child dependencies.
+///
+/// This type contains:
+/// * A string identifier.
+/// * The starting cell's coordinates `(column, row)`.
+/// * The ending cell's coordinates `(column, row)`.
 type ChildRangeType = (String, (u16, u16), (u16, u16));
+
+/// Represents the content of a spreadsheet cell.
+///
+/// The `Cell` enum is used to define the value or error state of a cell.
+///
+/// # Variants
+/// * `Value(i32)` - Contains a numeric value.
+/// * `Err` - Indicates an error state.
 #[derive(Debug, Clone, PartialEq, Copy)]
 pub enum Cell {
     Value(i32),
@@ -13,12 +33,38 @@ pub enum Cell {
 }
 
 impl Cell {
+    /// Creates a new cell with an initial value of 0.
+    ///
+    /// # Returns
+    /// * `Cell::Value(0)` - A new cell initialized with a value of 0.
+    ///
+    /// # Examples
+    /// ```rust
+    /// use embedded::spreadsheet::Cell;
+    /// let cell = Cell::new();
+    /// assert_eq!(cell, Cell::Value(0));
+    /// ```
     pub fn new() -> Self {
         Cell::Value(0)
     }
 }
 
-/// Convert a 1-based column index into letters (1→"A", 27→"AA")
+/// Converts a 1-based column index into letters.
+///
+/// This function translates a numeric column index into a letter-based identifier commonly
+/// used in spreadsheets (e.g., 1 → "A", 27 → "AA").
+///
+/// # Arguments
+/// * `n` - A 1-based column index.
+///
+/// # Returns
+/// * A `String` representing the column index as letters.
+///
+/// # Examples
+/// assert_eq!(col_to_letter(1), "A");    // Column 1 → "A"
+/// assert_eq!(col_to_letter(27), "AA");  // Column 27 → "AA"
+/// assert_eq!(col_to_letter(703), "AAA"); // Column 703 → "AAA"
+///
 fn col_to_letter(mut n: usize) -> String {
     let mut s = String::new();
     while n > 0 {
@@ -29,6 +75,19 @@ fn col_to_letter(mut n: usize) -> String {
     s.chars().rev().collect()
 }
 
+/// Represents the structure of a spreadsheet.
+///
+/// The `Spreadsheet` struct encapsulates the metadata and data storage for a spreadsheet.
+/// It supports tracking parent-child dependencies (normal and range-based) and holds cell
+/// values.
+///
+/// # Fields
+/// * `rows` - The number of rows in the spreadsheet.
+/// * `cols` - The number of columns in the spreadsheet.
+/// * `parents_normal` - A map linking each cell to its parent dependencies (normal dependencies).
+/// * `child_normal` - A map linking each cell to its child dependencies and identifier (normal dependencies).
+/// * `child_range` - A map linking each cell to range-based dependencies.
+/// * `cells` - A two-dimensional vector storing the content (`Cell`) of the spreadsheet.
 pub struct Spreadsheet {
     pub rows: usize,
     pub cols: usize,
@@ -37,8 +96,26 @@ pub struct Spreadsheet {
     pub child_range: HashMap<(u16, u16), ChildRangeType>,
     pub cells: Vec<Vec<Cell>>,
 }
-
 impl Spreadsheet {
+    /// Creates a new `Spreadsheet` instance with the specified number of rows and columns.
+    ///
+    /// Initializes all cells with a default value of `Cell::Value(0)`. Additionally, sets up
+    /// empty maps for parent-child dependencies (normal and range-based).
+    ///
+    /// # Arguments
+    /// * `rows` - The number of rows in the spreadsheet.
+    /// * `cols` - The number of columns in the spreadsheet.
+    ///
+    /// # Returns
+    /// * A new `Spreadsheet` instance.
+    ///
+    /// # Examples
+    /// ```rust
+    /// let sheet = embedded::spreadsheet::Spreadsheet::new(10, 5);
+    /// assert_eq!(sheet.rows, 10);
+    /// assert_eq!(sheet.cols, 5);
+    /// assert_eq!(sheet.cells.len(), 11); // Includes row 0
+    /// ```
     pub fn new(rows: usize, cols: usize) -> Self {
         let mut cells = Vec::with_capacity(rows + 1);
         for _ in 0..=rows {
@@ -54,7 +131,18 @@ impl Spreadsheet {
         }
     }
 
-    /// Return `Some(v)` if cell is a value, or `None` if it's `Err` or out of bounds.
+    /// Retrieves the value of a cell.
+    ///
+    /// Returns `Some(v)` if the cell contains a value (`Cell::Value(v)`), or `None` if the cell
+    /// is in an error state (`Cell::Err`) or is out of bounds.
+    ///
+    /// # Arguments
+    /// * `(c, r)` - The column and row coordinates of the cell `(column, row)`.
+    ///
+    /// # Returns
+    /// * `Some(i32)` - The value of the cell if valid.
+    /// * `None` - If the cell is out of bounds or in an error state.
+    ///
     fn get_val(&self, (c, r): (u16, u16)) -> Option<i32> {
         if r as usize <= self.rows && c as usize <= self.cols {
             match &self.cells[r as usize][c as usize] {
@@ -65,9 +153,36 @@ impl Spreadsheet {
             None
         }
     }
-
-    /// Set a cell’s formula or literal.  Abort (no change) on any parse error,
-    /// except when `/0` in a binary formula, which writes `Err`.
+    /// Updates a cell's value with a new expression and updates all dependencies.
+    ///
+    /// # Arguments
+    ///
+    /// * `coord` - The cell coordinates as (column, row) where both are 0-indexed
+    /// * `expr` - The expression to evaluate and store in the cell
+    ///
+    /// # Returns
+    ///
+    /// * `0` - Success
+    /// * `1` - Invalid cell coordinates (out of bounds)
+    /// * `3` - Unrecognized command or invalid expression syntax
+    /// * `4` - Detected a cyclic dependency
+    /// * `5` - Division by zero
+    ///
+    /// # Expression Types
+    ///
+    /// This function handles several types of expressions:
+    /// * Literal values: "42"
+    /// * Cell references: "A1"
+    /// * Binary operations: "A1+2", "3*B4"
+    /// * Range functions: "SUM(A1:B3)"
+    /// * Special functions: "SLEEP(5)" or "SLEEP(A1)"
+    ///
+    /// # Dependencies
+    ///
+    /// The function tracks dependencies between cells to maintain spreadsheet consistency:
+    /// * Updates the dependency graph when expressions reference other cells
+    /// * Prevents cyclic dependencies by restoring previous state when detected
+    /// * Recalculates dependent cells when a referenced cell changes
     pub fn set_cell(&mut self, coord: (u16, u16), expr: &str) -> u8 {
         if coord.1 as usize > self.rows || coord.0 as usize > self.cols {
             return 1; // Invalid cell
@@ -388,9 +503,32 @@ impl Spreadsheet {
 
         3 // unrecognized cmd
     }
-
-    /// Recompute all dependents of `start`.  If division-by-zero occurs in a child,
-    /// that child becomes `Err`; any other error in recomputation leaves it untouched.
+    /// Recomputes all cells that directly or indirectly depend on the cell at `start`.
+    /// This function performs a complete dependency-aware recalculation of all cells
+    /// that depend on the specified cell. The recalculation follows a proper topological
+    /// order to ensure that dependencies are calculated before their dependents.
+    ///
+    /// # Arguments
+    ///
+    /// * `start` - The (column, row) coordinates of the cell whose dependents should be recalculated
+    ///
+    /// # Process
+    ///
+    /// 1. First identifies all cells affected by the change using breadth-first traversal
+    /// 2. Sorts these cells in topological order to respect dependencies
+    /// 3. Recalculates each cell value according to its formula
+    ///
+    /// # Dependency Handling
+    ///
+    /// * Handles both direct cell references and range-based dependencies
+    /// * Manages special cases like SLEEP functions and binary operations
+    /// * Properly handles error propagation (e.g., division by zero)
+    ///
+    /// # Error Handling
+    ///
+    /// * If a division by zero occurs during recalculation, the affected cell becomes `Err`
+    /// * If other errors occur during formula evaluation, the cell remains unchanged
+    /// * Circular dependencies are detected and skipped during topological sorting
     pub fn recalc_dependents(&mut self, start: (u16, u16)) {
         // Keep track of all cells that need to be recalculated
         let mut all_cells_to_update = Vec::new();
@@ -628,7 +766,34 @@ impl Spreadsheet {
         Ok(())
     }
 
-    // Keep the original display function for backward compatibility
+    /// Displays a portion of the spreadsheet in a formatted table.
+    ///
+    /// This function prints a visual representation of a specified window of the spreadsheet
+    /// to the console. The output includes column headers (as letters) and row numbers,
+    /// with cell values or error indicators displayed in a tabular format.
+    ///
+    /// # Arguments
+    ///
+    /// * `start_row` - The starting row index (0-indexed internally, but displayed as 1-indexed)
+    /// * `start_col` - The starting column index (0-indexed internally, but displayed as letters)
+    /// * `max_rows` - Maximum number of rows to display
+    /// * `max_cols` - Maximum number of columns to display
+    ///
+    /// # Output Format
+    ///
+    /// * Column headers are displayed as letters (A, B, C, ...)
+    /// * Row headers are displayed as numbers (1, 2, 3, ...)
+    /// * Cell values are right-aligned and displayed in 8-character width columns
+    /// * Error cells are displayed as "ERR"
+    ///
+    /// # Example Output
+    ///
+    /// ```text
+    ///         A       B       C
+    ///   1     42       5       3
+    ///   2      7     ERR      12
+    ///   3     10      15      20
+    /// ```
     pub fn display(&self, start_row: usize, start_col: usize, max_rows: usize, max_cols: usize) {
         self.display_to(
             &mut std::io::stdout(),
@@ -639,6 +804,32 @@ impl Spreadsheet {
         )
         .expect("Failed to write to stdout");
     }
+    /// Checks if a cell is part of a circular dependency chain.
+    ///
+    /// This function determines whether the cell at the specified coordinates
+    /// is part of a circular dependency chain by performing a cycle detection
+    /// algorithm through the dependency graph.
+    ///
+    /// # Arguments
+    ///
+    /// * `start_cell` - The (column, row) coordinates of the cell to check for cycles
+    ///
+    /// # Returns
+    ///
+    /// * `true` - If a cycle is detected starting from the given cell
+    /// * `false` - If no cycle is detected
+    ///
+    /// # Algorithm
+    ///
+    /// Uses a depth-first search with visited and path tracking sets to detect cycles in the
+    /// dependency graph. The path set keeps track of cells in the current exploration path,
+    /// allowing the function to detect when it revisits a cell that's already in the current path.
+    ///
+    /// # Note
+    ///
+    /// This function is used internally to prevent circular references when setting cell formulas.
+    /// When a circular dependency is detected, the operation that would create it is aborted.
+    // Keep the original display function for backward compatibility
 
     pub fn has_cycle_from(&self, start_cell: (u16, u16)) -> bool {
         let mut visited = HashSet::new();
@@ -647,8 +838,29 @@ impl Spreadsheet {
         // Simply check if there's a cycle reachable from the start cell
         self.is_cyclic(start_cell, &mut visited, &mut path)
     }
-
-    // Helper function for cycle detection using DFS
+    /// Helper function for cycle detection using Depth-First Search (DFS).
+    ///
+    /// This function determines if there's a cyclic dependency starting from the specified cell
+    /// by traversing the dependency graph recursively. It uses DFS with path tracking to detect
+    /// cycles in the graph.
+    ///
+    /// # Arguments
+    ///
+    /// * `cell` - The current cell coordinates (column, row) being examined
+    /// * `visited` - Set of all cells visited during the entire traversal
+    /// * `path` - Set of cells in the current exploration path (used to detect cycles)
+    ///
+    /// # Returns
+    ///
+    /// * `true` - If a cycle is detected starting from the given cell
+    /// * `false` - If no cycle is detected
+    ///
+    /// # Algorithm
+    ///
+    /// 1. Marks the current cell as visited and adds it to the current path
+    /// 2. Recursively checks all dependencies (both direct references and range references)
+    /// 3. If a cell in the current path is revisited, a cycle is detected
+    /// 4. Removes the cell from the current path upon backtracking
     fn is_cyclic(
         &self,
         cell: (u16, u16),
@@ -695,7 +907,26 @@ impl Spreadsheet {
     }
 }
 
-// Helper function to check if a cell is within a range
+/// Determines if a cell is contained within a specified range.
+///
+/// This utility function checks whether the given cell coordinates fall within
+/// the bounds of the specified range (inclusive on both ends).
+///
+/// # Arguments
+///
+/// * `cell` - The cell coordinates (column, row) to check
+/// * `start` - The starting coordinates (column, row) of the range
+/// * `end` - The ending coordinates (column, row) of the range
+///
+/// # Returns
+///
+/// * `true` - If the cell is within the range (inclusive)
+/// * `false` - If the cell is outside the range
+///
+/// # Note
+///
+/// The function handles the case where the range might be specified with
+/// start and end coordinates in any order (e.g., B3:A1 is treated the same as A1:B3).
 fn is_within_range(cell: (u16, u16), start: (u16, u16), end: (u16, u16)) -> bool {
     let (col, row) = cell;
     let (start_col, start_row) = start;

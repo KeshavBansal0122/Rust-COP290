@@ -1,3 +1,18 @@
+//! # Expression Module
+//!
+//! This module provides data structures and functionality for representing and
+//! manipulating expressions in a spreadsheet context.
+//!
+//! ## Key Components:
+//!
+//! - `Operator`: Enum representing basic arithmetic operations (addition, subtraction, etc.)
+//! - `RangeFunction`: Enum for statistical operations over cell ranges (min, max, average, etc.)
+//! - `CellRange`: Structure that defines a rectangular range of cells
+//! - `Expression`: Core enum representing different types of expressions (numbers, cell references, operations)
+//!
+//! Expressions can be converted to string representations based on absolute cell positions,
+//! and include support for basic arithmetic, cell references, range functions, and special
+//! operations like Sleep (which introduces a delay).
 use crate::common::structs::{AbsCell, RelCell};
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Display};

@@ -1,9 +1,6 @@
 use std::env;
-mod commands;
-mod function;
-mod myparser;
-mod spreadsheet;
-use embedded::ui;
+
+use embedded::{commands, spreadsheet, ui};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut args = env::args();

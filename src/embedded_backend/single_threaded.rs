@@ -1,3 +1,7 @@
+//! This is a controller module of the ui which serves as the glue between the ui and the storage.
+//!
+//! Most of the functions of this module are just redirected the core storage.
+//! The exceptions are the features that are unrelated to the backend, like undo and redo
 use crate::common::cell_value::{CellData, CellError, CellValue};
 use crate::common::structs::AbsCell;
 use crate::embedded_backend::storage::{Storage, StorageError};
